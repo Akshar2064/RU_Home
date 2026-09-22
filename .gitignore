@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+dist-ssr/
+build/
+
+# Capacitor / Android
+Mobile-Portal/android/app/build/
+Mobile-Portal/android/build/
+Mobile-Portal/android/.gradle/
+Mobile-Portal/android/local.properties
+Mobile-Portal/android/.idea/
+*.apk
+*.aab
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Env files
+.env
+.env.local
+.env.*.local
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log

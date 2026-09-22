@@ -1,0 +1,74 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-navy-900: #14213D;
+  --color-navy-800: #1B2B4B;
+  --color-navy-700: #24365E;
+  --color-navy-600: #2E4270;
+  --color-navy-50: #EEF1F7;
+
+  --color-bg: #F5F6FA;
+  --color-surface: #FFFFFF;
+  --color-border: #E4E7EE;
+
+  --color-marigold-500: #F2A93B;
+  --color-marigold-600: #DB9424;
+  --color-marigold-50: #FDF3DE;
+
+  --color-text-primary: #1A2130;
+  --color-text-secondary: #626B80;
+  --color-text-tertiary: #9198A9;
+  --color-text-inverse: #FFFFFF;
+
+  --color-success: #2F9E68;
+  --color-success-bg: #E7F6EE;
+  --color-danger: #D64545;
+  --color-danger-bg: #FCEAEA;
+  --color-danger-strong: #9E2B2B;
+  --color-warning: #C9860B;
+  --color-warning-bg: #FDF3DC;
+  --color-info: #3B6FD8;
+  --color-info-bg: #EAF0FC;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  color: var(--color-text-primary);
+  background: var(--color-bg);
+  -webkit-tap-highlight-color: transparent;
+}
+
+button {
+  font: inherit;
+}
+
+.guard-focus:focus-visible {
+  outline: 2px solid var(--color-navy-700);
+  outline-offset: 2px;
+}
+
+@keyframes guard-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .45; }
+}
+.guard-pulse { animation: guard-pulse 1.4s ease-in-out infinite; }
+
+@keyframes guard-spin {
+  to { transform: rotate(360deg); }
+}
+.guard-spin { animation: guard-spin 0.8s linear infinite; }
+
+@keyframes guard-slide-up {
+  from { transform: translateY(16px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.guard-slide-up { animation: guard-slide-up 0.22s ease-out; }
+
+@keyframes portal-fade-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+.portal-animate-in { animation: portal-fade-in 0.25s ease-out; }
