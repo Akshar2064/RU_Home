@@ -1,9 +1,10 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   LayoutDashboard, CalendarClock, ClipboardList, MessageSquare,
   ChevronRight, ChevronLeft, LogOut, Plus, Check, X, MapPin,
-  AlertTriangle, CheckCircle2, ShieldPlus,
+  AlertTriangle, CheckCircle2, ShieldPlus, Menu, Inbox,
 } from "lucide-react";
+import { useDialog, greeting } from "./hooks.js";
 
 /* ============================================================================
    Head Guard — Community-Portal experience.
@@ -21,16 +22,16 @@ import {
 function GlobalStyles() {
   return (
     <style>{`
-      @import url('https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
       :root {
         --color-navy-900: #14213D; --color-navy-800: #1B2B4B; --color-navy-700: #24365E; --color-navy-50: #EEF1F7;
         --color-bg: #F5F6FA; --color-surface: #FFFFFF; --color-border: #E4E7EE;
         --color-marigold-500: #F2A93B; --color-marigold-600: #DB9424; --color-marigold-50: #FDF3DE;
-        --color-text-primary: #1A2130; --color-text-secondary: #626B80; --color-text-tertiary: #9198A9;
+        --color-text-primary: #1A2130; --color-text-secondary: #626B80; --color-text-tertiary: #697184;
         --color-success: #2F9E68; --color-success-bg: #E7F6EE;
         --color-danger: #D64545; --color-danger-bg: #FCEAEA;
         --color-warning: #C9860B; --color-warning-bg: #FDF3DC;
         --color-info: #3B6FD8; --color-info-bg: #EAF0FC;
+        --color-success-fg: #237A50; --color-warning-fg: #8A5A00; --color-danger-fg: #B83232; --color-info-fg: #2F5DBF;
       }
       * { box-sizing: border-box; }
       .hgapp-root { font-family: 'Inter', sans-serif; color: var(--color-text-primary); }
@@ -40,6 +41,11 @@ function GlobalStyles() {
       .hgapp-animate-in { animation: hgapp-fade-in 0.2s ease-out; }
       .hgapp-btn { font-weight: 600; transition: filter .15s ease, transform .1s ease; }
       .hgapp-btn:active { transform: scale(0.98); }
+      .hgapp-nav-item:hover { background: rgba(255,255,255,0.06); }
+      .hgapp-icon-btn { transition: background-color .15s ease; }
+      .hgapp-icon-btn:hover { background: var(--color-navy-50); }
+      @keyframes hgapp-slide-in { from { transform: translateX(-100%); } to { transform: translateX(0); } }
+      .hgapp-drawer-in { animation: hgapp-slide-in 0.22s ease-out; }
     `}</style>
   );
 }
@@ -75,10 +81,10 @@ function Button({ variant = "primary", size = "md", icon: Icon, className = "", 
 function Badge({ children, tone = "neutral" }) {
   const tones = {
     neutral: { fg: "var(--color-text-secondary)", bg: "#EEF0F4" },
-    success: { fg: "var(--color-success)", bg: "var(--color-success-bg)" },
-    warning: { fg: "var(--color-warning)", bg: "var(--color-warning-bg)" },
-    danger: { fg: "var(--color-danger)", bg: "var(--color-danger-bg)" },
-    info: { fg: "var(--color-info)", bg: "var(--color-info-bg)" },
+    success: { fg: "var(--color-success-fg)", bg: "var(--color-success-bg)" },
+    warning: { fg: "var(--color-warning-fg)", bg: "var(--color-warning-bg)" },
+    danger: { fg: "var(--color-danger-fg)", bg: "var(--color-danger-bg)" },
+    info: { fg: "var(--color-info-fg)", bg: "var(--color-info-bg)" },
   };
   const t = tones[tone];
   return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold whitespace-nowrap" style={{ color: t.fg, background: t.bg }}>{children}</span>;
@@ -132,14 +138,16 @@ function Field({ label, children }) {
 function Select({ children, ...props }) { return <select className="hgapp-focus w-full rounded-lg px-3.5 py-2.5 text-sm bg-white" style={inputStyle} {...props}>{children}</select>; }
 
 function Modal({ open, onClose, title, subtitle, children, footer }) {
+  const panelRef = useDialog(open, onClose);
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center sm:p-4">
       <div className="absolute inset-0" style={{ background: "rgba(20,33,61,0.45)" }} onClick={onClose} />
-      <div className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl hgapp-animate-in max-h-[88vh] flex flex-col">
-        <div className="flex items-start justify-between px-6 pt-5 pb-4" style={{ borderBottom: "1px solid var(--color-border)" }}>
+      <div ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={title}
+        className="relative w-full max-w-md bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl hgapp-animate-in max-h-[92vh] sm:max-h-[88vh] flex flex-col outline-none">
+        <div className="flex items-start justify-between gap-3 px-6 pt-5 pb-4" style={{ borderBottom: "1px solid var(--color-border)" }}>
           <div><h2 className="hgapp-heading text-lg font-bold">{title}</h2>{subtitle && <p className="text-sm mt-0.5" style={{ color: "var(--color-text-secondary)" }}>{subtitle}</p>}</div>
-          <button onClick={onClose} className="hgapp-focus w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ color: "var(--color-text-secondary)" }}><X size={17} /></button>
+          <button onClick={onClose} aria-label="Close" className="hgapp-focus hgapp-icon-btn w-9 h-9 -mr-1.5 -mt-1 rounded-full flex items-center justify-center shrink-0" style={{ color: "var(--color-text-secondary)" }}><X size={18} /></button>
         </div>
         <div className="px-6 py-5 overflow-y-auto">{children}</div>
         {footer && <div className="px-6 py-4 flex items-center justify-end gap-3" style={{ borderTop: "1px solid var(--color-border)" }}>{footer}</div>}
@@ -150,9 +158,9 @@ function Modal({ open, onClose, title, subtitle, children, footer }) {
 
 function ToastStack({ toasts }) {
   return (
-    <div className="fixed top-4 right-4 z-[300] flex flex-col gap-2 w-[320px]">
+    <div aria-live="polite" className="fixed top-4 right-4 left-4 sm:left-auto z-[300] flex flex-col gap-2 sm:w-[340px]">
       {toasts.map((t) => (
-        <div key={t.id} className="rounded-xl px-4 py-3 shadow-lg hgapp-animate-in" style={{ background: t.tone === "danger" ? "var(--color-danger)" : "var(--color-navy-900)", color: "#fff" }}>
+        <div key={t.id} role="status" className="rounded-xl px-4 py-3 shadow-lg hgapp-animate-in" style={{ background: t.tone === "danger" ? "var(--color-danger)" : "var(--color-navy-900)", color: "#fff" }}>
           <p className="text-sm font-bold">{t.title}</p>
           {t.body && <p className="text-xs mt-0.5 opacity-90">{t.body}</p>}
         </div>
@@ -211,47 +219,80 @@ const NAV = [
   { key: "handover", label: "Handover Notes", icon: MessageSquare },
 ];
 
-function Sidebar({ route, onNavigate, collapsed, onToggleCollapse }) {
+function SidebarNav({ route, onNavigate, collapsed, badges = {} }) {
   return (
-    <aside className={`hidden md:flex flex-col shrink-0 h-screen sticky top-0 transition-[width] duration-200 relative ${collapsed ? "w-[76px]" : "w-[248px]"}`} style={{ background: "var(--color-navy-900)" }}>
+    <>
       <div className={`flex items-center gap-2.5 px-4 h-16 shrink-0 ${collapsed ? "justify-center px-0" : ""}`}>
         <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: "var(--color-marigold-500)" }}><ShieldPlus size={18} style={{ color: "var(--color-navy-900)" }} /></div>
-        {!collapsed && <div className="min-w-0"><p className="hgapp-heading text-white font-semibold text-sm leading-tight truncate">RUhome</p><p className="text-[11px] leading-tight" style={{ color: "rgba(255,255,255,0.5)" }}>Head Guard</p></div>}
+        {!collapsed && <div className="min-w-0"><p className="hgapp-heading text-white font-semibold text-sm leading-tight truncate">RUhome</p><p className="text-[11px] leading-tight" style={{ color: "rgba(255,255,255,0.6)" }}>Head Guard</p></div>}
       </div>
-      <nav className="flex-1 overflow-y-auto px-3 py-2 flex flex-col gap-0.5">
+      <nav aria-label="Head guard sections" className="flex-1 overflow-y-auto px-3 py-2 flex flex-col gap-0.5">
         {NAV.map((item) => {
           const active = route === item.key;
+          const badge = badges[item.key];
           return (
             <button key={item.key} onClick={() => onNavigate(item.key)} title={collapsed ? item.label : undefined}
-              className={`hgapp-focus w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${collapsed ? "justify-center" : ""}`}
-              style={{ background: active ? "rgba(242,169,59,0.14)" : "transparent", color: active ? "var(--color-marigold-500)" : "rgba(255,255,255,0.72)" }}>
-              <item.icon size={17} strokeWidth={2} className="shrink-0" />
-              {!collapsed && <span className="truncate">{item.label}</span>}
+              aria-label={collapsed ? `${item.label}${badge ? `, ${badge} pending` : ""}` : undefined} aria-current={active ? "page" : undefined}
+              className={`hgapp-focus ${active ? "" : "hgapp-nav-item"} relative w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${collapsed ? "justify-center" : ""}`}
+              style={{ background: active ? "rgba(242,169,59,0.14)" : undefined, color: active ? "var(--color-marigold-500)" : "rgba(255,255,255,0.78)" }}>
+              <item.icon size={17} strokeWidth={2} className="shrink-0" aria-hidden="true" />
+              {!collapsed && <span className="truncate flex-1 text-left">{item.label}</span>}
+              {badge ? (
+                <span className={`${collapsed ? "absolute top-1 right-2" : ""} min-w-[20px] h-5 px-1.5 rounded-full text-[11px] font-bold flex items-center justify-center`} style={{ background: "var(--color-marigold-500)", color: "var(--color-navy-900)" }}>
+                  {badge}{!collapsed && <span className="sr-only"> pending</span>}
+                </span>
+              ) : null}
             </button>
           );
         })}
       </nav>
-      <button onClick={onToggleCollapse} className="hgapp-focus absolute -right-3 top-16 w-6 h-6 rounded-full flex items-center justify-center shadow" style={{ background: "#fff", border: "1px solid var(--color-border)", color: "var(--color-text-secondary)" }}>
-        {collapsed ? <ChevronRight size={13} /> : <ChevronLeft size={13} />}
-      </button>
-    </aside>
+    </>
   );
 }
 
-function TopBar({ breadcrumb, onLogout }) {
+function Sidebar({ route, onNavigate, collapsed, onToggleCollapse, mobileOpen, onCloseMobile, badges }) {
+  const mobileRef = useDialog(mobileOpen, onCloseMobile);
   return (
-    <header className="h-16 shrink-0 flex items-center justify-between px-4 md:px-7" style={{ borderBottom: "1px solid var(--color-border)", background: "var(--color-surface)" }}>
-      <div>
-        <p className="text-sm font-semibold">{breadcrumb}</p>
-        <p className="text-[11px]" style={{ color: "var(--color-text-tertiary)" }}>Scope: {HEAD_GUARD.scope}</p>
+    <>
+      <aside className={`hidden md:flex flex-col shrink-0 h-screen sticky top-0 transition-[width] duration-200 relative ${collapsed ? "w-[76px]" : "w-[248px]"}`} style={{ background: "var(--color-navy-900)" }}>
+        <SidebarNav route={route} onNavigate={onNavigate} collapsed={collapsed} badges={badges} />
+        <button onClick={onToggleCollapse} aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          className="hgapp-focus absolute -right-3.5 top-[52px] w-7 h-7 rounded-full flex items-center justify-center shadow" style={{ background: "#fff", border: "1px solid var(--color-border)", color: "var(--color-text-secondary)" }}>
+          {collapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
+        </button>
+      </aside>
+
+      {mobileOpen && (
+        <div className="md:hidden fixed inset-0 z-[150] flex">
+          <div className="absolute inset-0" style={{ background: "rgba(20,33,61,0.5)" }} onClick={onCloseMobile} />
+          <div ref={mobileRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Navigation"
+            className="relative w-[280px] max-w-[85vw] h-full flex flex-col hgapp-drawer-in outline-none" style={{ background: "var(--color-navy-900)" }}>
+            <button onClick={onCloseMobile} aria-label="Close navigation" className="hgapp-focus absolute top-3.5 right-3 w-9 h-9 rounded-full flex items-center justify-center z-10" style={{ color: "rgba(255,255,255,0.85)", background: "rgba(255,255,255,0.08)" }}>
+              <X size={17} />
+            </button>
+            <SidebarNav route={route} onNavigate={(k) => { onNavigate(k); onCloseMobile(); }} collapsed={false} badges={badges} />
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+function TopBar({ breadcrumb, onLogout, onOpenMobileNav }) {
+  return (
+    <header className="sticky top-0 z-[80] h-16 shrink-0 flex items-center gap-2 sm:gap-3 px-3 sm:px-4 md:px-7" style={{ borderBottom: "1px solid var(--color-border)", background: "var(--color-surface)" }}>
+      <button onClick={onOpenMobileNav} aria-label="Open navigation" className="hgapp-focus hgapp-icon-btn md:hidden w-10 h-10 rounded-lg flex items-center justify-center shrink-0" style={{ color: "var(--color-text-secondary)" }}><Menu size={20} /></button>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-semibold truncate">{breadcrumb}</p>
+        <p className="text-xs truncate" style={{ color: "var(--color-text-tertiary)" }}>Scope: {HEAD_GUARD.scope}</p>
       </div>
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2 sm:gap-3">
         <div className="text-right hidden sm:block">
           <p className="text-xs font-bold leading-tight">{HEAD_GUARD.name}</p>
           <p className="text-[11px] leading-tight" style={{ color: "var(--color-text-tertiary)" }}>{HEAD_GUARD.employeeId} · Head Guard</p>
         </div>
         <Avatar initials={HEAD_GUARD.initials} size={34} />
-        <button onClick={onLogout} className="hgapp-focus w-9 h-9 rounded-full flex items-center justify-center" style={{ border: "1px solid var(--color-border)", color: "var(--color-text-secondary)" }} title="Log out">
+        <button onClick={onLogout} aria-label="Log out" title="Log out" className="hgapp-focus hgapp-icon-btn w-10 h-10 rounded-full flex items-center justify-center" style={{ border: "1px solid var(--color-border)", color: "var(--color-text-secondary)" }}>
           <LogOut size={16} />
         </button>
       </div>
@@ -270,40 +311,43 @@ function DashboardPage({ roster, leaveRequests, onNavigate }) {
 
   return (
     <div>
-      <PageHeader title={`Good morning, ${HEAD_GUARD.name.split(" ")[0]}`} blurb="Here's coverage across every gate right now." />
+      <PageHeader title={`${greeting()}, ${HEAD_GUARD.name.split(" ")[0]}`} blurb="Here's coverage across every gate right now." />
 
       {gaps.length > 0 && (
-        <div className="rounded-2xl p-4 mb-6 flex items-start gap-3" style={{ background: "var(--color-danger-bg)" }}>
-          <AlertTriangle size={18} style={{ color: "var(--color-danger)" }} className="shrink-0 mt-0.5" />
-          <div className="flex-1">
-            <p className="text-sm font-bold" style={{ color: "var(--color-danger)" }}>{gaps.length} coverage gap{gaps.length > 1 ? "s" : ""} — no check-in within grace period</p>
-            <p className="text-xs mt-0.5" style={{ color: "var(--color-text-secondary)" }}>
-              {gaps.map((g) => `${g.gate} · ${g.window}`).join("  ·  ")}
-            </p>
+        <div role="alert" className="rounded-2xl p-4 mb-6 flex flex-col sm:flex-row sm:items-start gap-3" style={{ background: "var(--color-danger-bg)", border: "1px solid #F3C9C9" }}>
+          <div className="flex items-start gap-3 flex-1">
+            <AlertTriangle size={18} aria-hidden="true" style={{ color: "var(--color-danger-fg)" }} className="shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm font-bold" style={{ color: "var(--color-danger-fg)" }}>{gaps.length} coverage gap{gaps.length > 1 ? "s" : ""} — no check-in within grace period</p>
+              <ul className="mt-1 space-y-0.5">
+                {gaps.map((g) => <li key={g.id} className="text-xs" style={{ color: "var(--color-text-secondary)" }}>{g.gate} · {g.window} · {g.guard}</li>)}
+              </ul>
+            </div>
           </div>
-          <Button variant="danger" size="sm" onClick={() => onNavigate("roster")}>Arrange backup</Button>
+          <Button variant="danger" size="md" className="self-stretch sm:self-start" onClick={() => onNavigate("roster")}>Arrange backup</Button>
         </div>
       )}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
         <StatCard label="On duty now" value={onDutyNow} sub={`of ${roster.length} shifts today`} icon={CheckCircle2} tone="var(--color-success)" />
         <StatCard label="Coverage gaps" value={gaps.length} sub="need backup" icon={AlertTriangle} tone={gaps.length ? "var(--color-danger)" : "var(--color-navy-700)"} />
-        <StatCard label="Pending leave" value={pendingLeave} sub="awaiting your decision" icon={ClipboardList} />
+        <StatCard label="Pending leave" value={pendingLeave} sub="awaiting your decision" icon={ClipboardList} tone={pendingLeave ? "var(--color-warning)" : undefined} />
         <StatCard label="Gates covered" value={GATES.length} sub="society-wide" icon={MapPin} />
       </div>
 
       <Card padded={false}>
-        <div className="px-5 pt-5 pb-3 flex items-center justify-between">
-          <h3 className="hgapp-heading font-bold text-[15px]">Live roster · right now</h3>
+        <div className="px-5 pt-5 pb-3 flex items-center justify-between gap-3">
+          <h2 className="hgapp-heading font-bold text-[15px]">Live roster · right now</h2>
           <Button variant="secondary" size="sm" onClick={() => onNavigate("roster")}>View full roster</Button>
         </div>
         <div className="divide-y" style={{ borderColor: "var(--color-border)" }}>
-          {roster.map((s) => (
+          {/* Gaps first — they're what needs action. */}
+          {[...roster].sort((a, b) => (a.status === "Missed" ? -1 : 0) - (b.status === "Missed" ? -1 : 0)).map((s) => (
             <div key={s.id} className="flex items-center gap-3 px-5 py-3">
               <Avatar initials={initialsOf(s.guard)} size={30} />
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold truncate">{s.guard}</p>
-                <p className="text-[11px]" style={{ color: "var(--color-text-secondary)" }}>{s.gate} · {s.window}</p>
+                <p className="text-xs" style={{ color: "var(--color-text-secondary)" }}>{s.gate} · {s.window}{s.checkInTime ? ` · in at ${s.checkInTime}` : ""}</p>
               </div>
               <Badge tone={SHIFT_STATUS_TONE[s.status]}>{s.status}</Badge>
             </div>
@@ -326,12 +370,13 @@ function RosterPage({ roster, onAddShift }) {
         action={<Button variant="accent" icon={Plus} onClick={() => setOpen(true)}>Add Shift</Button>}
       />
 
-      <Card padded={false}>
-        <table className="w-full text-sm">
+      <Card padded={false} className="overflow-hidden">
+        <div className="overflow-x-auto">
+        <table className="w-full text-sm whitespace-nowrap">
           <thead>
             <tr className="text-left" style={{ borderBottom: "1px solid var(--color-border)" }}>
               {["Date", "Gate", "Shift window", "Guard", "Status", "Check-in"].map((h) => (
-                <th key={h} className="px-5 py-3 text-xs font-semibold" style={{ color: "var(--color-text-tertiary)" }}>{h}</th>
+                <th key={h} scope="col" className="px-5 py-3 text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--color-text-tertiary)" }}>{h}</th>
               ))}
             </tr>
           </thead>
@@ -348,6 +393,7 @@ function RosterPage({ roster, onAddShift }) {
             ))}
           </tbody>
         </table>
+        </div>
       </Card>
 
       <Modal
@@ -360,6 +406,11 @@ function RosterPage({ roster, onAddShift }) {
           <Button variant="primary" onClick={() => { onAddShift(form); setOpen(false); }}>Add Shift</Button>
         </>}
       >
+        {roster.some((s) => s.date === form.date && s.window === form.window && s.guard === form.guard) && (
+          <p role="alert" className="text-xs font-medium rounded-lg p-3 mb-4 flex items-start gap-2" style={{ background: "var(--color-warning-bg)", color: "var(--color-warning-fg)" }}>
+            <AlertTriangle size={14} aria-hidden="true" className="shrink-0 mt-px" />{form.guard} is already rostered for this shift window.
+          </p>
+        )}
         <Field label="Guard">
           <Select value={form.guard} onChange={(e) => setForm({ ...form, guard: e.target.value })}>
             {GUARDS.map((g) => <option key={g.id}>{g.name}</option>)}
@@ -386,26 +437,31 @@ function LeavePage({ leaveRequests, onDecide }) {
       <PageHeader title="Leave Requests" blurb="Approve or reject guard leave, and reassign the now-open shift." />
       <div className="space-y-3">
         {leaveRequests.length === 0 && (
-          <Card className="text-center py-10">
-            <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>No leave requests right now.</p>
+          <Card className="text-center py-12 flex flex-col items-center">
+            <div className="w-12 h-12 rounded-2xl flex items-center justify-center mb-3" style={{ background: "var(--color-navy-50)" }}><Inbox size={22} aria-hidden="true" style={{ color: "var(--color-navy-700)" }} /></div>
+            <p className="text-sm font-semibold">No leave requests right now</p>
+            <p className="text-xs mt-1" style={{ color: "var(--color-text-secondary)" }}>New requests from guards will appear here.</p>
           </Card>
         )}
-        {leaveRequests.map((l) => (
-          <Card key={l.id} className="flex items-center gap-4">
-            <Avatar initials={initialsOf(l.guard)} size={38} />
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <p className="text-sm font-bold">{l.guard}</p>
-                <Badge tone={LEAVE_STATUS_TONE[l.status]}>{l.status}</Badge>
+        {/* Pending requests first so decisions aren't buried under history. */}
+        {[...leaveRequests].sort((a, b) => (a.status === "Pending" ? -1 : 0) - (b.status === "Pending" ? -1 : 0)).map((l) => (
+          <Card key={l.id} className="flex flex-col sm:flex-row sm:items-center gap-4">
+            <div className="flex items-start gap-4 flex-1 min-w-0">
+              <Avatar initials={initialsOf(l.guard)} size={38} />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="text-sm font-bold">{l.guard}</p>
+                  <Badge tone={LEAVE_STATUS_TONE[l.status]}>{l.status}</Badge>
+                </div>
+                <p className="text-xs mt-0.5" style={{ color: "var(--color-text-secondary)" }}>{l.shiftLabel}</p>
+                <p className="text-sm mt-1.5">“{l.reason}”</p>
+                <p className="text-xs mt-1" style={{ color: "var(--color-text-tertiary)" }}>Requested {l.requestedOn}</p>
               </div>
-              <p className="text-xs mt-0.5" style={{ color: "var(--color-text-secondary)" }}>{l.shiftLabel}</p>
-              <p className="text-xs mt-1">{l.reason}</p>
-              <p className="text-[11px] mt-1" style={{ color: "var(--color-text-tertiary)" }}>Requested {l.requestedOn}</p>
             </div>
             {l.status === "Pending" && (
-              <div className="flex items-center gap-2 shrink-0">
-                <Button variant="secondary" size="sm" icon={X} onClick={() => onDecide(l.id, "Rejected")}>Reject</Button>
-                <Button variant="success" size="sm" icon={Check} onClick={() => onDecide(l.id, "Approved")}>Approve</Button>
+              <div className="grid grid-cols-2 sm:flex items-center gap-2 shrink-0">
+                <Button variant="secondary" size="md" icon={X} onClick={() => onDecide(l.id, "Rejected")}>Reject</Button>
+                <Button variant="success" size="md" icon={Check} onClick={() => onDecide(l.id, "Approved")}>Approve</Button>
               </div>
             )}
           </Card>
@@ -422,12 +478,12 @@ function HandoverPage() {
       <div className="space-y-3">
         {HANDOVER_FEED.map((n) => (
           <Card key={n.id}>
-            <div className="flex items-center justify-between mb-1.5">
+            <div className="flex items-center justify-between gap-3 mb-1.5">
               <span className="text-xs font-bold" style={{ color: "var(--color-navy-700)" }}>{n.gate}</span>
-              <span className="text-[11px]" style={{ color: "var(--color-text-tertiary)" }}>{n.time}</span>
+              <span className="text-xs" style={{ color: "var(--color-text-tertiary)" }}>{n.time}</span>
             </div>
-            <p className="text-sm">{n.note}</p>
-            <p className="text-[11px] mt-2" style={{ color: "var(--color-text-tertiary)" }}>Logged by {n.guard}</p>
+            <p className="text-sm leading-relaxed">{n.note}</p>
+            <p className="text-xs mt-2" style={{ color: "var(--color-text-tertiary)" }}>Logged by {n.guard}</p>
           </Card>
         ))}
       </div>
@@ -445,6 +501,9 @@ export default function HeadGuardApp({ onExitToPortal }) {
   const [roster, setRoster] = useState(INITIAL_ROSTER);
   const [leaveRequests, setLeaveRequests] = useState(INITIAL_LEAVE);
   const [toasts, setToasts] = useState([]);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
+  useEffect(() => { window.scrollTo(0, 0); }, [route]);
 
   const pushToast = (t) => {
     const id = Math.random().toString(36).slice(2);
@@ -480,10 +539,12 @@ export default function HeadGuardApp({ onExitToPortal }) {
     <div className="hgapp-root">
       <GlobalStyles />
       <div className="min-h-screen flex" style={{ background: "var(--color-bg)" }}>
-        <Sidebar route={route} onNavigate={setRoute} collapsed={collapsed} onToggleCollapse={() => setCollapsed((c) => !c)} />
+        <Sidebar route={route} onNavigate={setRoute} collapsed={collapsed} onToggleCollapse={() => setCollapsed((c) => !c)}
+          mobileOpen={mobileNavOpen} onCloseMobile={() => setMobileNavOpen(false)}
+          badges={{ leave: leaveRequests.filter((l) => l.status === "Pending").length, dashboard: roster.filter((s) => s.status === "Missed").length }} />
         <div className="flex-1 min-w-0 flex flex-col">
-          <TopBar breadcrumb={breadcrumbFor(route)} onLogout={() => { pushToast({ title: "Logged out", body: "You have been signed out safely." }); setTimeout(() => onExitToPortal?.(), 300); }} />
-          <main className="flex-1 p-4 md:p-7 hgapp-animate-in max-w-full overflow-x-hidden">{PAGES[route]}</main>
+          <TopBar breadcrumb={breadcrumbFor(route)} onOpenMobileNav={() => setMobileNavOpen(true)} onLogout={() => { pushToast({ title: "Logged out", body: "You have been signed out safely." }); setTimeout(() => onExitToPortal?.(), 300); }} />
+          <main key={route} className="flex-1 p-4 md:p-7 hgapp-animate-in max-w-full overflow-x-hidden">{PAGES[route]}</main>
         </div>
       </div>
       <ToastStack toasts={toasts} />

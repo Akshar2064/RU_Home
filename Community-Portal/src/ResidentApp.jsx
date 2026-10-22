@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
+import { useDialog } from "./hooks.js";
 import {
   Home, UserPlus, Car, Baby, CalendarCheck, Wallet, Wrench, Briefcase,
   ShoppingBag, Bell, User, LogOut, Menu, X, Search, ChevronDown, ChevronRight,
@@ -56,13 +57,13 @@ const TODAY_VISITORS = [
 ];
 
 const STATUS_STYLES = {
-  Expected: { fg: "var(--color-info)", bg: "var(--color-info-bg)" },
-  "Checked-in": { fg: "var(--color-success)", bg: "var(--color-success-bg)" },
+  Expected: { fg: "var(--color-info-fg)", bg: "var(--color-info-bg)" },
+  "Checked-in": { fg: "var(--color-success-fg)", bg: "var(--color-success-bg)" },
   Completed: { fg: "var(--color-text-secondary)", bg: "#EEF0F4" },
-  Open: { fg: "var(--color-warning)", bg: "var(--color-warning-bg)" },
-  Assigned: { fg: "var(--color-info)", bg: "var(--color-info-bg)" },
-  "In Progress": { fg: "var(--color-warning)", bg: "var(--color-warning-bg)" },
-  Resolved: { fg: "var(--color-success)", bg: "var(--color-success-bg)" },
+  Open: { fg: "var(--color-warning-fg)", bg: "var(--color-warning-bg)" },
+  Assigned: { fg: "var(--color-info-fg)", bg: "var(--color-info-bg)" },
+  "In Progress": { fg: "var(--color-warning-fg)", bg: "var(--color-warning-bg)" },
+  Resolved: { fg: "var(--color-success-fg)", bg: "var(--color-success-bg)" },
 };
 
 const OUTSTANDING_BILL = {
@@ -255,7 +256,6 @@ function qrGrid(seed, n = 17) {
 function GlobalStyles() {
   return (
     <style>{`
-      @import url('https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
 
       :root {
         --color-navy-900: #14213D;
@@ -270,7 +270,7 @@ function GlobalStyles() {
         --color-marigold-50: #FDF3DE;
         --color-text-primary: #1A2130;
         --color-text-secondary: #626B80;
-        --color-text-tertiary: #9198A9;
+        --color-text-tertiary: #697184;
         --color-success: #2F9E68;
         --color-success-bg: #E7F6EE;
         --color-danger: #D64545;
@@ -279,6 +279,10 @@ function GlobalStyles() {
         --color-warning-bg: #FDF3DC;
         --color-info: #3B6FD8;
         --color-info-bg: #EAF0FC;
+        --color-success-fg: #237A50;
+        --color-warning-fg: #8A5A00;
+        --color-danger-fg: #B83232;
+        --color-info-fg: #2F5DBF;
       }
 
       * { box-sizing: border-box; }
@@ -368,10 +372,10 @@ function IconButton({ icon: Icon, label, active, badge, className = "", ...props
 function Badge({ children, tone = "neutral", fg, bg }) {
   const tones = {
     neutral: { fg: "var(--color-text-secondary)", bg: "#EEF0F4" },
-    success: { fg: "var(--color-success)", bg: "var(--color-success-bg)" },
-    warning: { fg: "var(--color-warning)", bg: "var(--color-warning-bg)" },
-    danger: { fg: "var(--color-danger)", bg: "var(--color-danger-bg)" },
-    info: { fg: "var(--color-info)", bg: "var(--color-info-bg)" },
+    success: { fg: "var(--color-success-fg)", bg: "var(--color-success-bg)" },
+    warning: { fg: "var(--color-warning-fg)", bg: "var(--color-warning-bg)" },
+    danger: { fg: "var(--color-danger-fg)", bg: "var(--color-danger-bg)" },
+    info: { fg: "var(--color-info-fg)", bg: "var(--color-info-bg)" },
   };
   const t = fg && bg ? { fg, bg } : tones[tone];
   return (
@@ -433,16 +437,22 @@ function EmptyState({ icon: Icon, title, body, action }) {
 }
 
 function Modal({ open, onClose, title, subtitle, children, footer, width = "max-w-md" }) {
+  const panelRef = useDialog(open, onClose);
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center sm:p-4">
       <div
         className="absolute inset-0"
         style={{ background: "rgba(20, 33, 61, 0.45)" }}
         onClick={onClose}
       />
       <div
-        className={`relative w-full ${width} bg-white rounded-2xl shadow-2xl rwa-animate-in max-h-[90vh] flex flex-col`}
+        ref={panelRef}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-label={typeof title === "string" ? title : undefined}
+        className={`relative w-full ${width} bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl rwa-animate-in max-h-[92vh] sm:max-h-[90vh] flex flex-col outline-none`}
       >
         <div className="flex items-start justify-between px-6 pt-5 pb-4" style={{ borderBottom: "1px solid var(--color-border)" }}>
           <div>
@@ -451,7 +461,7 @@ function Modal({ open, onClose, title, subtitle, children, footer, width = "max-
           </div>
           <button
             aria-label="Close"
-            className="rwa-focus w-8 h-8 rounded-full flex items-center justify-center shrink-0"
+            className="rwa-focus w-9 h-9 -mr-1.5 -mt-1 rounded-full flex items-center justify-center shrink-0"
             style={{ color: "var(--color-text-secondary)" }}
             onMouseEnter={(e) => (e.currentTarget.style.background = "#F1F2F6")}
             onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
@@ -499,10 +509,11 @@ function TextInput(props) {
 
 function ToastStack({ toasts, onDismiss }) {
   return (
-    <div className="fixed top-5 right-5 z-[200] flex flex-col gap-2.5 w-[320px]">
+    <div aria-live="polite" className="fixed top-4 right-4 left-4 sm:left-auto z-[200] flex flex-col gap-2.5 sm:w-[340px]">
       {toasts.map((t) => (
         <div
           key={t.id}
+          role="status"
           className="rwa-toast rounded-xl bg-white shadow-lg px-4 py-3.5 flex items-start gap-3"
           style={{ border: "1px solid var(--color-border)" }}
         >
@@ -519,7 +530,7 @@ function ToastStack({ toasts, onDismiss }) {
             <p className="text-sm font-semibold leading-snug">{t.title}</p>
             {t.body && <p className="text-xs mt-0.5" style={{ color: "var(--color-text-secondary)" }}>{t.body}</p>}
           </div>
-          <button onClick={() => onDismiss(t.id)} className="rwa-focus shrink-0" style={{ color: "var(--color-text-tertiary)" }}>
+          <button onClick={() => onDismiss(t.id)} aria-label="Dismiss notification" className="rwa-focus shrink-0 -mr-1.5 -mt-1 w-7 h-7 rounded-full flex items-center justify-center" style={{ color: "var(--color-text-tertiary)" }}>
             <X size={14} />
           </button>
         </div>
@@ -786,6 +797,7 @@ function SidebarContent({ route, onNavigate, collapsed }) {
 }
 
 function Sidebar({ route, onNavigate, collapsed, onToggleCollapse, mobileOpen, onCloseMobile }) {
+  const mobileRef = useDialog(mobileOpen, onCloseMobile);
   return (
     <>
       {/* Desktop sidebar */}
@@ -808,10 +820,11 @@ function Sidebar({ route, onNavigate, collapsed, onToggleCollapse, mobileOpen, o
       {mobileOpen && (
         <div className="md:hidden fixed inset-0 z-[90] flex">
           <div className="absolute inset-0" style={{ background: "rgba(20,33,61,0.5)" }} onClick={onCloseMobile} />
-          <div className="relative w-72 h-full rwa-drawer-in" style={{ background: "var(--color-navy-900)" }}>
+          <div ref={mobileRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Navigation" className="relative w-72 max-w-[85vw] h-full rwa-drawer-in outline-none" style={{ background: "var(--color-navy-900)" }}>
             <button
               onClick={onCloseMobile}
-              className="rwa-focus absolute top-4 right-4 w-8 h-8 rounded-full flex items-center justify-center"
+              aria-label="Close navigation"
+              className="rwa-focus absolute top-3.5 right-3 w-9 h-9 rounded-full flex items-center justify-center z-10"
               style={{ color: "rgba(255,255,255,0.8)", background: "rgba(255,255,255,0.08)" }}
             >
               <X size={16} />

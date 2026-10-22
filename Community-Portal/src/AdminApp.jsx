@@ -1,4 +1,5 @@
-import React, { useState, useMemo, useRef } from "react";
+import React, { useState, useMemo, useRef, useEffect } from "react";
+import { useDialog, useEscape, greeting } from "./hooks.js";
 import {
   LayoutDashboard, Users, UserPlus, Shield, Building2, Car, CalendarCheck,
   UserCheck, Wallet, Receipt, Wrench, Store, Megaphone, Bell, BarChart3,
@@ -556,16 +557,16 @@ function generateTempPassword() {
 function GlobalStyles() {
   return (
     <style>{`
-      @import url('https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
       :root {
         --color-navy-900: #14213D; --color-navy-800: #1B2B4B; --color-navy-700: #24365E; --color-navy-50: #EEF1F7;
         --color-bg: #F5F6FA; --color-surface: #FFFFFF; --color-border: #E4E7EE;
         --color-marigold-500: #F2A93B; --color-marigold-600: #DB9424; --color-marigold-50: #FDF3DE;
-        --color-text-primary: #1A2130; --color-text-secondary: #626B80; --color-text-tertiary: #9198A9;
+        --color-text-primary: #1A2130; --color-text-secondary: #626B80; --color-text-tertiary: #697184;
         --color-success: #2F9E68; --color-success-bg: #E7F6EE;
         --color-danger: #D64545; --color-danger-bg: #FCEAEA;
         --color-warning: #C9860B; --color-warning-bg: #FDF3DC;
         --color-info: #3B6FD8; --color-info-bg: #EAF0FC;
+        --color-success-fg: #237A50; --color-warning-fg: #8A5A00; --color-danger-fg: #B83232; --color-info-fg: #2F5DBF;
       }
       * { box-sizing: border-box; }
       .aapp-root { font-family: 'Inter', sans-serif; color: var(--color-text-primary); }
@@ -580,7 +581,17 @@ function GlobalStyles() {
       .aapp-focus:focus-visible { outline: 2px solid var(--color-navy-700); outline-offset: 2px; }
       .aapp-btn { font-weight: 600; transition: filter .15s ease, transform .1s ease; }
       .aapp-btn:active { transform: scale(0.98); }
-      .aapp-row:hover { background: var(--color-bg); }
+      .aapp-row:hover, .aapp-row:focus-visible { background: var(--color-bg); }
+      .aapp-row:focus-visible { outline: 2px solid var(--color-navy-700); outline-offset: -2px; }
+      .aapp-nav-item:hover { background: rgba(255,255,255,0.06); }
+      .aapp-icon-btn { transition: background-color .15s ease; }
+      .aapp-icon-btn:hover { background: var(--color-navy-50); }
+      .aapp-stat-link { transition: border-color .15s ease, box-shadow .15s ease; }
+      .aapp-stat-link:hover { border-color: #C9CFDB !important; box-shadow: 0 2px 8px rgba(20,33,61,0.06); }
+      @keyframes aapp-slide-in { from { transform: translateX(-100%); } to { transform: translateX(0); } }
+      .aapp-drawer-in { animation: aapp-slide-in 0.22s ease-out; }
+      @keyframes aapp-slide-in-right { from { transform: translateX(24px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+      .aapp-panel-in { animation: aapp-slide-in-right 0.2s ease-out; }
     `}</style>
   );
 }
@@ -616,10 +627,10 @@ function Button({ variant = "primary", size = "md", icon: Icon, iconRight, class
 function Badge({ children, tone = "neutral", fg, bg }) {
   const tones = {
     neutral: { fg: "var(--color-text-secondary)", bg: "#EEF0F4" },
-    success: { fg: "var(--color-success)", bg: "var(--color-success-bg)" },
-    warning: { fg: "var(--color-warning)", bg: "var(--color-warning-bg)" },
-    danger: { fg: "var(--color-danger)", bg: "var(--color-danger-bg)" },
-    info: { fg: "var(--color-info)", bg: "var(--color-info-bg)" },
+    success: { fg: "var(--color-success-fg)", bg: "var(--color-success-bg)" },
+    warning: { fg: "var(--color-warning-fg)", bg: "var(--color-warning-bg)" },
+    danger: { fg: "var(--color-danger-fg)", bg: "var(--color-danger-bg)" },
+    info: { fg: "var(--color-info-fg)", bg: "var(--color-info-bg)" },
   };
   const t = fg && bg ? { fg, bg } : tones[tone];
   return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold whitespace-nowrap" style={{ color: t.fg, background: t.bg }}>{children}</span>;
@@ -651,27 +662,33 @@ function EmptyState({ icon: Icon, title, body, action }) {
   );
 }
 
-function Field({ label, children, hint }) {
+function Field({ label, children, hint, error, required }) {
   return (
     <div className="mb-4">
-      <label className="block text-xs font-semibold mb-1.5" style={{ color: "var(--color-text-secondary)" }}>{label}</label>
+      <label className="block text-xs font-semibold mb-1.5" style={{ color: "var(--color-text-secondary)" }}>
+        {label}{required && <span aria-hidden="true" style={{ color: "var(--color-danger)" }}> *</span>}
+      </label>
       {children}
-      {hint && <p className="text-xs mt-1" style={{ color: "var(--color-text-tertiary)" }}>{hint}</p>}
+      {hint && !error && <p className="text-xs mt-1" style={{ color: "var(--color-text-tertiary)" }}>{hint}</p>}
+      {error && <p role="alert" className="text-xs mt-1 font-medium flex items-center gap-1" style={{ color: "var(--color-danger-fg)" }}><AlertTriangle size={12} aria-hidden="true" />{error}</p>}
     </div>
   );
 }
 
 const inputStyle = { border: "1px solid var(--color-border)", background: "#fff" };
-function TextInput(props) { return <input className="aapp-focus w-full rounded-lg px-3.5 py-2.5 text-sm" style={inputStyle} {...props} />; }
+function TextInput({ invalid, ...props }) {
+  return <input aria-invalid={invalid || undefined} className="aapp-focus w-full rounded-lg px-3.5 py-2.5 text-sm" style={{ ...inputStyle, ...(invalid ? { borderColor: "var(--color-danger)" } : null) }} {...props} />;
+}
 function Select({ children, ...props }) { return <select className="aapp-focus w-full rounded-lg px-3.5 py-2.5 text-sm bg-white" style={inputStyle} {...props}>{children}</select>; }
 
 function Checkbox({ checked, onChange, label }) {
   return (
-    <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+    <label className="inline-flex items-center gap-2 cursor-pointer select-none py-1">
+      <input type="checkbox" checked={checked} onChange={onChange} className="peer sr-only" />
       <span
-        onClick={onChange}
-        className="w-[18px] h-[18px] rounded-md flex items-center justify-center shrink-0"
-        style={{ background: checked ? "var(--color-navy-800)" : "#fff", border: `1.5px solid ${checked ? "var(--color-navy-800)" : "var(--color-border)"}` }}
+        aria-hidden="true"
+        className="w-[18px] h-[18px] rounded-md flex items-center justify-center shrink-0 peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2"
+        style={{ background: checked ? "var(--color-navy-800)" : "#fff", border: `1.5px solid ${checked ? "var(--color-navy-800)" : "#B8BFCC"}`, outlineColor: "var(--color-navy-700)" }}
       >
         {checked && <Check size={12} style={{ color: "#fff" }} strokeWidth={3} />}
       </span>
@@ -681,31 +698,35 @@ function Checkbox({ checked, onChange, label }) {
 }
 
 function Modal({ open, onClose, title, subtitle, children, footer, width = "max-w-md" }) {
+  const panelRef = useDialog(open, onClose);
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center sm:p-4">
       <div className="absolute inset-0" style={{ background: "rgba(20,33,61,0.45)" }} onClick={onClose} />
-      <div className={`relative w-full ${width} bg-white rounded-2xl shadow-2xl aapp-animate-in max-h-[88vh] flex flex-col`}>
-        <div className="flex items-start justify-between px-6 pt-5 pb-4" style={{ borderBottom: "1px solid var(--color-border)" }}>
+      <div ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={title}
+        className={`relative w-full ${width} bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl aapp-animate-in max-h-[92vh] sm:max-h-[88vh] flex flex-col outline-none`}>
+        <div className="flex items-start justify-between gap-3 px-5 sm:px-6 pt-5 pb-4" style={{ borderBottom: "1px solid var(--color-border)" }}>
           <div><h2 className="aapp-heading text-lg font-bold">{title}</h2>{subtitle && <p className="text-sm mt-0.5" style={{ color: "var(--color-text-secondary)" }}>{subtitle}</p>}</div>
-          <button onClick={onClose} className="aapp-focus w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ color: "var(--color-text-secondary)" }}><X size={17} /></button>
+          <button onClick={onClose} aria-label="Close" className="aapp-focus aapp-icon-btn w-9 h-9 -mr-1.5 -mt-1 rounded-full flex items-center justify-center shrink-0" style={{ color: "var(--color-text-secondary)" }}><X size={18} /></button>
         </div>
-        <div className="px-6 py-5 overflow-y-auto aapp-scrollbar">{children}</div>
-        {footer && <div className="px-6 py-4 flex items-center justify-end gap-3" style={{ borderTop: "1px solid var(--color-border)" }}>{footer}</div>}
+        <div className="px-5 sm:px-6 py-5 overflow-y-auto aapp-scrollbar">{children}</div>
+        {footer && <div className="px-5 sm:px-6 py-4 flex items-center justify-end gap-3" style={{ borderTop: "1px solid var(--color-border)" }}>{footer}</div>}
       </div>
     </div>
   );
 }
 
 function Drawer({ open, onClose, title, subtitle, children, footer }) {
+  const panelRef = useDialog(open, onClose);
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-[200] flex justify-end">
       <div className="absolute inset-0" style={{ background: "rgba(20,33,61,0.4)" }} onClick={onClose} />
-      <div className="relative w-full max-w-md bg-white h-full flex flex-col aapp-animate-in shadow-2xl">
-        <div className="flex items-start justify-between px-6 pt-6 pb-4" style={{ borderBottom: "1px solid var(--color-border)" }}>
-          <div><h2 className="aapp-heading text-lg font-bold">{title}</h2>{subtitle && <p className="text-sm mt-0.5" style={{ color: "var(--color-text-secondary)" }}>{subtitle}</p>}</div>
-          <button onClick={onClose} className="aapp-focus w-8 h-8 rounded-full flex items-center justify-center" style={{ color: "var(--color-text-secondary)" }}><X size={17} /></button>
+      <div ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={title}
+        className="relative w-full max-w-md bg-white h-full flex flex-col aapp-panel-in shadow-2xl outline-none">
+        <div className="flex items-start justify-between gap-3 px-6 pt-6 pb-4" style={{ borderBottom: "1px solid var(--color-border)" }}>
+          <div className="min-w-0"><h2 className="aapp-heading text-lg font-bold truncate">{title}</h2>{subtitle && <p className="text-sm mt-0.5" style={{ color: "var(--color-text-secondary)" }}>{subtitle}</p>}</div>
+          <button onClick={onClose} aria-label="Close" className="aapp-focus aapp-icon-btn w-9 h-9 -mr-1.5 -mt-1 rounded-full flex items-center justify-center shrink-0" style={{ color: "var(--color-text-secondary)" }}><X size={18} /></button>
         </div>
         <div className="flex-1 overflow-y-auto aapp-scrollbar px-6 py-5">{children}</div>
         {footer && <div className="px-6 py-4 flex items-center justify-end gap-3" style={{ borderTop: "1px solid var(--color-border)" }}>{footer}</div>}
@@ -716,14 +737,14 @@ function Drawer({ open, onClose, title, subtitle, children, footer }) {
 
 function ToastStack({ toasts, onDismiss }) {
   return (
-    <div className="fixed top-5 right-5 z-[300] flex flex-col gap-2.5 w-[320px]">
+    <div aria-live="polite" className="fixed top-4 right-4 left-4 sm:left-auto z-[300] flex flex-col gap-2.5 sm:w-[340px]">
       {toasts.map((t) => (
-        <div key={t.id} className="aapp-toast rounded-xl bg-white shadow-lg px-4 py-3.5 flex items-start gap-3" style={{ border: "1px solid var(--color-border)" }}>
+        <div key={t.id} role="status" className="aapp-toast rounded-xl bg-white shadow-lg px-4 py-3.5 flex items-start gap-3" style={{ border: "1px solid var(--color-border)" }}>
           <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ background: t.tone === "danger" ? "var(--color-danger-bg)" : "var(--color-success-bg)", color: t.tone === "danger" ? "var(--color-danger)" : "var(--color-success)" }}>
             {t.tone === "danger" ? <AlertTriangle size={16} /> : <CheckCircle2 size={16} />}
           </div>
           <div className="flex-1 min-w-0"><p className="text-sm font-semibold leading-snug">{t.title}</p>{t.body && <p className="text-xs mt-0.5" style={{ color: "var(--color-text-secondary)" }}>{t.body}</p>}</div>
-          <button onClick={() => onDismiss(t.id)} style={{ color: "var(--color-text-tertiary)" }}><X size={14} /></button>
+          <button onClick={() => onDismiss(t.id)} aria-label="Dismiss notification" className="aapp-focus aapp-icon-btn -mr-1.5 -mt-1 w-7 h-7 rounded-full flex items-center justify-center shrink-0" style={{ color: "var(--color-text-tertiary)" }}><X size={14} /></button>
         </div>
       ))}
     </div>
@@ -752,14 +773,20 @@ function DataTable({ columns, rows, onRowClick, emptyIcon, emptyTitle, emptyBody
         <thead>
           <tr style={{ borderBottom: "1px solid var(--color-border)" }}>
             {columns.map((c) => (
-              <th key={c.key} className="text-left px-4 py-3 font-semibold text-xs uppercase tracking-wide" style={{ color: "var(--color-text-tertiary)" }}>{c.label}</th>
+              <th key={c.key} scope="col" className="text-left px-4 py-3 font-semibold text-xs uppercase tracking-wide whitespace-nowrap" style={{ color: "var(--color-text-tertiary)" }}>{c.label}</th>
             ))}
+            {onRowClick && <th aria-hidden="true" className="w-6" />}
           </tr>
         </thead>
         <tbody>
           {rows.map((row, i) => (
-            <tr key={row.id || i} onClick={() => onRowClick && onRowClick(row)} className={`aapp-row ${onRowClick ? "cursor-pointer" : ""}`} style={{ borderBottom: "1px solid var(--color-border)" }}>
-              {columns.map((c) => <td key={c.key} className="px-4 py-3.5 align-middle">{c.render ? c.render(row) : row[c.key]}</td>)}
+            <tr key={row.id || i}
+              onClick={onRowClick ? () => onRowClick(row) : undefined}
+              onKeyDown={onRowClick ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onRowClick(row); } } : undefined}
+              tabIndex={onRowClick ? 0 : undefined}
+              className={`aapp-row group ${onRowClick ? "cursor-pointer" : ""}`} style={{ borderBottom: "1px solid var(--color-border)" }}>
+              {columns.map((c) => <td key={c.key} className="px-4 py-3.5 align-middle whitespace-nowrap">{c.render ? c.render(row) : row[c.key]}</td>)}
+              {onRowClick && <td className="pr-4 py-3.5 align-middle w-6"><ChevronRight size={16} aria-hidden="true" className="opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity" style={{ color: "var(--color-text-tertiary)" }} /></td>}
             </tr>
           ))}
         </tbody>
@@ -770,10 +797,13 @@ function DataTable({ columns, rows, onRowClick, emptyIcon, emptyTitle, emptyBody
 
 function TableToolbar({ search, onSearch, placeholder, filters, action }) {
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-4">
-      <div className="relative flex-1 max-w-sm">
-        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--color-text-tertiary)" }} />
-        <input value={search} onChange={(e) => onSearch(e.target.value)} placeholder={placeholder || "Search…"} className="aapp-focus w-full rounded-lg pl-9 pr-3 py-2.5 text-sm" style={inputStyle} />
+    <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-3 mb-4">
+      <div className="relative flex-1 sm:max-w-sm">
+        <Search size={15} aria-hidden="true" className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--color-text-tertiary)" }} />
+        <input type="search" aria-label={placeholder || "Search"} value={search} onChange={(e) => onSearch(e.target.value)} onKeyDown={(e) => { if (e.key === "Escape" && search) onSearch(""); }} placeholder={placeholder || "Search…"} className="aapp-focus w-full rounded-lg pl-9 pr-9 py-2.5 text-sm [&::-webkit-search-cancel-button]:hidden" style={inputStyle} />
+        {search && (
+          <button type="button" onClick={() => onSearch("")} aria-label="Clear search" className="aapp-focus aapp-icon-btn absolute right-1.5 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full flex items-center justify-center" style={{ color: "var(--color-text-tertiary)" }}><X size={14} /></button>
+        )}
       </div>
       {filters}
       <div className="flex-1" />
@@ -782,21 +812,37 @@ function TableToolbar({ search, onSearch, placeholder, filters, action }) {
   );
 }
 
-function StatCard({ label, value, sub, icon: Icon, tone }) {
-  return (
-    <Card className="!p-4">
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-xs font-semibold" style={{ color: "var(--color-text-tertiary)" }}>{label}</span>
-        {Icon && <Icon size={15} style={{ color: tone || "var(--color-navy-700)" }} />}
+function StatCard({ label, value, sub, icon: Icon, tone, onClick }) {
+  const body = (
+    <>
+      <div className="flex items-center justify-between mb-2 gap-2">
+        <span className="text-xs font-semibold" style={{ color: "var(--color-text-secondary)" }}>{label}</span>
+        {Icon && <Icon size={15} aria-hidden="true" style={{ color: tone || "var(--color-navy-700)" }} />}
       </div>
-      <p className="aapp-heading text-2xl font-bold">{value}</p>
+      <p className="aapp-heading text-2xl font-bold tabular-nums truncate">{value}</p>
       {sub && <p className="text-xs mt-1" style={{ color: "var(--color-text-secondary)" }}>{sub}</p>}
-    </Card>
+    </>
   );
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} className="aapp-focus aapp-stat-link rounded-2xl bg-white p-4 text-left w-full" style={{ border: "1px solid var(--color-border)" }}>
+        {body}
+      </button>
+    );
+  }
+  return <Card className="!p-4">{body}</Card>;
 }
 
 function SectionHeader({ title, action }) {
-  return <div className="flex items-center justify-between mb-4"><h3 className="aapp-heading font-bold text-[15px]">{title}</h3>{action}</div>;
+  return <div className="flex items-center justify-between mb-4"><h2 className="aapp-heading font-bold text-[15px]">{title}</h2>{action}</div>;
+}
+
+function SectionLink({ onClick, children }) {
+  return (
+    <button type="button" onClick={onClick} className="aapp-focus inline-flex items-center gap-1 rounded-md px-2 py-1 -mr-2 text-xs font-semibold hover:underline" style={{ color: "var(--color-navy-700)" }}>
+      {children}<ArrowRight size={13} aria-hidden="true" />
+    </button>
+  );
 }
 
 function PageHeader({ title, blurb, action }) {
@@ -843,7 +889,7 @@ function AdminLogin({ onLogin }) {
             <form onSubmit={handleContinue}>
               <h2 className="aapp-heading text-2xl font-bold mb-1.5">Admin sign in</h2>
               <p className="text-sm mb-7" style={{ color: "var(--color-text-secondary)" }}>Sign in to manage RUhome.</p>
-              <Field label="Email"><TextInput type="email" placeholder="priya.nair@ruhome.in" autoFocus /></Field>
+              <Field label="Email"><TextInput type="email" autoComplete="email" placeholder="priya.nair@ruhome.in" autoFocus /></Field>
               <Field label="Password"><TextInput type="password" placeholder="••••••••" /></Field>
               <Button type="submit" variant="primary" size="lg" className="w-full mt-2" disabled={loading}>{loading ? <Spinner color="#fff" /> : "Continue"}</Button>
               <p className="text-xs text-center mt-6" style={{ color: "var(--color-text-tertiary)" }}>Demo: any email / password works</p>
@@ -868,7 +914,7 @@ function AdminLogin({ onLogin }) {
    SIDEBAR
    ============================================================================ */
 
-function Sidebar({ route, onNavigate, collapsed, onToggleCollapse }) {
+function SidebarNav({ route, onNavigate, collapsed }) {
   const topKey = route.split(".")[0];
   const [openGroups, setOpenGroups] = useState(() => {
     const g = {};
@@ -876,23 +922,25 @@ function Sidebar({ route, onNavigate, collapsed, onToggleCollapse }) {
     return g;
   });
   const toggleGroup = (key) => setOpenGroups((p) => ({ ...p, [key]: !p[key] }));
+  // Keep the active section expanded when the route changes from elsewhere (dashboard links, quick jump).
+  useEffect(() => { setOpenGroups((p) => (p[topKey] === false ? { ...p, [topKey]: true } : p)); }, [topKey]);
 
   return (
-    <aside className={`hidden md:flex flex-col shrink-0 h-screen sticky top-0 transition-[width] duration-200 relative ${collapsed ? "w-[76px]" : "w-[248px]"}`} style={{ background: "var(--color-navy-900)" }}>
+    <>
       <div className={`flex items-center gap-2.5 px-4 h-16 shrink-0 ${collapsed ? "justify-center px-0" : ""}`}>
         <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: "var(--color-marigold-500)" }}><Building2 size={18} style={{ color: "var(--color-navy-900)" }} /></div>
-        {!collapsed && <div className="min-w-0"><p className="aapp-heading text-white font-semibold text-sm leading-tight truncate">RUhome</p><p className="text-[11px] leading-tight" style={{ color: "rgba(255,255,255,0.5)" }}>Admin Portal</p></div>}
+        {!collapsed && <div className="min-w-0"><p className="aapp-heading text-white font-semibold text-sm leading-tight truncate">RUhome</p><p className="text-[11px] leading-tight" style={{ color: "rgba(255,255,255,0.6)" }}>Admin Portal</p></div>}
       </div>
-      <nav className="flex-1 overflow-y-auto aapp-scrollbar px-3 py-2 flex flex-col gap-0.5">
+      <nav aria-label="Admin sections" className="flex-1 overflow-y-auto aapp-scrollbar px-3 py-2 flex flex-col gap-0.5">
         {NAV.map((item) => {
           const active = topKey === item.key.split(".")[0] && !item.children;
           const groupActive = item.children && topKey === item.key;
           if (!item.children) {
             return (
-              <button key={item.key} onClick={() => onNavigate(item.key)} title={collapsed ? item.label : undefined}
-                className={`aapp-focus w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${collapsed ? "justify-center" : ""}`}
-                style={{ background: active ? "rgba(242,169,59,0.14)" : "transparent", color: active ? "var(--color-marigold-500)" : "rgba(255,255,255,0.72)" }}>
-                <item.icon size={17} strokeWidth={2} className="shrink-0" />
+              <button key={item.key} onClick={() => onNavigate(item.key)} title={collapsed ? item.label : undefined} aria-label={collapsed ? item.label : undefined} aria-current={active ? "page" : undefined}
+                className={`aapp-focus ${active ? "" : "aapp-nav-item"} w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${collapsed ? "justify-center" : ""}`}
+                style={{ background: active ? "rgba(242,169,59,0.14)" : undefined, color: active ? "var(--color-marigold-500)" : "rgba(255,255,255,0.78)" }}>
+                <item.icon size={17} strokeWidth={2} className="shrink-0" aria-hidden="true" />
                 {!collapsed && <span className="truncate">{item.label}</span>}
               </button>
             );
@@ -900,17 +948,18 @@ function Sidebar({ route, onNavigate, collapsed, onToggleCollapse }) {
           return (
             <div key={item.key}>
               <button onClick={() => (collapsed ? onNavigate(item.children[0].key) : toggleGroup(item.key))} title={collapsed ? item.label : undefined}
-                className={`aapp-focus w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${collapsed ? "justify-center" : ""}`}
-                style={{ background: groupActive && collapsed ? "rgba(242,169,59,0.14)" : "transparent", color: groupActive ? "var(--color-marigold-500)" : "rgba(255,255,255,0.72)" }}>
-                <item.icon size={17} strokeWidth={2} className="shrink-0" />
-                {!collapsed && <><span className="truncate flex-1 text-left">{item.label}</span><ChevronDown size={14} style={{ transform: openGroups[item.key] ? "rotate(180deg)" : "none", transition: "transform .15s" }} /></>}
+                aria-label={collapsed ? item.label : undefined} aria-expanded={collapsed ? undefined : !!openGroups[item.key]}
+                className={`aapp-focus ${groupActive && collapsed ? "" : "aapp-nav-item"} w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${collapsed ? "justify-center" : ""}`}
+                style={{ background: groupActive && collapsed ? "rgba(242,169,59,0.14)" : undefined, color: groupActive ? "var(--color-marigold-500)" : "rgba(255,255,255,0.78)" }}>
+                <item.icon size={17} strokeWidth={2} className="shrink-0" aria-hidden="true" />
+                {!collapsed && <><span className="truncate flex-1 text-left">{item.label}</span><ChevronDown size={14} aria-hidden="true" style={{ transform: openGroups[item.key] ? "rotate(180deg)" : "none", transition: "transform .15s" }} /></>}
               </button>
               {!collapsed && openGroups[item.key] && (
                 <div className="ml-[26px] pl-3 flex flex-col gap-0.5 mt-0.5 mb-1" style={{ borderLeft: "1px solid rgba(255,255,255,0.12)" }}>
                   {item.children.map((c) => (
-                    <button key={c.key} onClick={() => onNavigate(c.key)}
-                      className="aapp-focus text-left rounded-lg px-3 py-2 text-[13px] font-medium truncate"
-                      style={{ background: route === c.key ? "rgba(242,169,59,0.14)" : "transparent", color: route === c.key ? "var(--color-marigold-500)" : "rgba(255,255,255,0.62)" }}>
+                    <button key={c.key} onClick={() => onNavigate(c.key)} aria-current={route === c.key ? "page" : undefined}
+                      className={`aapp-focus ${route === c.key ? "" : "aapp-nav-item"} text-left rounded-lg px-3 py-2 text-[13px] font-medium truncate`}
+                      style={{ background: route === c.key ? "rgba(242,169,59,0.14)" : undefined, color: route === c.key ? "var(--color-marigold-500)" : "rgba(255,255,255,0.7)" }}>
                       {c.label}
                     </button>
                   ))}
@@ -920,10 +969,99 @@ function Sidebar({ route, onNavigate, collapsed, onToggleCollapse }) {
           );
         })}
       </nav>
-      <button onClick={onToggleCollapse} className="aapp-focus absolute -right-3 top-16 w-6 h-6 rounded-full flex items-center justify-center shadow" style={{ background: "#fff", border: "1px solid var(--color-border)", color: "var(--color-text-secondary)" }}>
-        {collapsed ? <ChevronRight size={13} /> : <ChevronLeft size={13} />}
-      </button>
-    </aside>
+    </>
+  );
+}
+
+function Sidebar({ route, onNavigate, collapsed, onToggleCollapse, mobileOpen, onCloseMobile }) {
+  const mobileRef = useDialog(mobileOpen, onCloseMobile);
+  return (
+    <>
+      <aside className={`hidden md:flex flex-col shrink-0 h-screen sticky top-0 transition-[width] duration-200 relative ${collapsed ? "w-[76px]" : "w-[248px]"}`} style={{ background: "var(--color-navy-900)" }}>
+        <SidebarNav route={route} onNavigate={onNavigate} collapsed={collapsed} />
+        <button onClick={onToggleCollapse} aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          className="aapp-focus absolute -right-3.5 top-[52px] w-7 h-7 rounded-full flex items-center justify-center shadow" style={{ background: "#fff", border: "1px solid var(--color-border)", color: "var(--color-text-secondary)" }}>
+          {collapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
+        </button>
+      </aside>
+
+      {mobileOpen && (
+        <div className="md:hidden fixed inset-0 z-[150] flex">
+          <div className="absolute inset-0" style={{ background: "rgba(20,33,61,0.5)" }} onClick={onCloseMobile} />
+          <div ref={mobileRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Navigation"
+            className="relative w-[280px] max-w-[85vw] h-full flex flex-col aapp-drawer-in outline-none" style={{ background: "var(--color-navy-900)" }}>
+            <button onClick={onCloseMobile} aria-label="Close navigation" className="aapp-focus absolute top-3.5 right-3 w-9 h-9 rounded-full flex items-center justify-center z-10" style={{ color: "rgba(255,255,255,0.85)", background: "rgba(255,255,255,0.08)" }}>
+              <X size={17} />
+            </button>
+            <SidebarNav route={route} onNavigate={(k) => { onNavigate(k); onCloseMobile(); }} collapsed={false} />
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+/* ============================================================================
+   QUICK JUMP (Ctrl/⌘ + K) — 35+ admin screens are hard to reach through
+   nested menus; this lets admins type a page name and go.
+   ============================================================================ */
+
+const JUMP_TARGETS = NAV.flatMap((item) =>
+  item.children
+    ? item.children.map((c) => ({ key: c.key, label: c.label, section: item.label, icon: item.icon }))
+    : [{ key: item.key, label: item.label, section: "", icon: item.icon }]
+);
+
+function QuickJump({ open, onClose, onNavigate }) {
+  const [query, setQuery] = useState("");
+  const [active, setActive] = useState(0);
+  const panelRef = useDialog(open, onClose);
+  const inputRef = useRef(null);
+
+  useEffect(() => { if (open) { setQuery(""); setActive(0); setTimeout(() => inputRef.current?.focus(), 0); } }, [open]);
+
+  const q = query.trim().toLowerCase();
+  const results = q
+    ? JUMP_TARGETS.filter((t) => `${t.section} ${t.label}`.toLowerCase().includes(q))
+    : JUMP_TARGETS;
+
+  if (!open) return null;
+  const go = (t) => { if (!t) return; onNavigate(t.key); onClose(); };
+  const onKeyDown = (e) => {
+    if (e.key === "ArrowDown") { e.preventDefault(); setActive((i) => Math.min(i + 1, results.length - 1)); }
+    if (e.key === "ArrowUp") { e.preventDefault(); setActive((i) => Math.max(i - 1, 0)); }
+    if (e.key === "Enter") { e.preventDefault(); go(results[active]); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[250] flex items-start justify-center px-4 pt-[12vh]">
+      <div className="absolute inset-0" style={{ background: "rgba(20,33,61,0.45)" }} onClick={onClose} />
+      <div ref={panelRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Jump to page"
+        className="relative w-full max-w-lg bg-white rounded-2xl shadow-2xl aapp-animate-in overflow-hidden outline-none">
+        <div className="flex items-center gap-3 px-4" style={{ borderBottom: "1px solid var(--color-border)" }}>
+          <Search size={17} aria-hidden="true" style={{ color: "var(--color-text-tertiary)" }} />
+          <input ref={inputRef} value={query} onChange={(e) => { setQuery(e.target.value); setActive(0); }} onKeyDown={onKeyDown}
+            placeholder="Jump to a page — e.g. payments, incidents, flats" aria-label="Search pages"
+            role="combobox" aria-expanded="true" aria-controls="aapp-jump-list" aria-activedescendant={results[active] ? `jump-${results[active].key}` : undefined}
+            className="flex-1 py-4 text-sm outline-none bg-transparent" />
+          <kbd className="hidden sm:inline text-[11px] font-semibold px-1.5 py-0.5 rounded" style={{ background: "var(--color-bg)", color: "var(--color-text-secondary)", border: "1px solid var(--color-border)" }}>Esc</kbd>
+        </div>
+        <ul id="aapp-jump-list" role="listbox" className="max-h-[50vh] overflow-y-auto aapp-scrollbar py-2">
+          {results.length === 0 && <li className="px-4 py-8 text-center text-sm" style={{ color: "var(--color-text-secondary)" }}>No pages match “{query}”.</li>}
+          {results.map((t, i) => (
+            <li key={t.key} id={`jump-${t.key}`} role="option" aria-selected={i === active}
+              onMouseEnter={() => setActive(i)} onClick={() => go(t)}
+              className="mx-2 flex items-center gap-3 rounded-lg px-3 py-2.5 cursor-pointer"
+              style={{ background: i === active ? "var(--color-navy-50)" : "transparent" }}>
+              <t.icon size={16} aria-hidden="true" style={{ color: "var(--color-navy-700)" }} />
+              <span className="text-sm font-semibold">{t.label}</span>
+              {t.section && <span className="text-xs" style={{ color: "var(--color-text-tertiary)" }}>{t.section}</span>}
+              {i === active && <ArrowRight size={14} aria-hidden="true" className="ml-auto" style={{ color: "var(--color-text-tertiary)" }} />}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
   );
 }
 
@@ -940,24 +1078,42 @@ const NOTIF_TYPE_META = {
 const NOTIF_TONE_BG = { info: "var(--color-info-bg)", warning: "var(--color-warning-bg)", danger: "var(--color-danger-bg)", neutral: "#EEF0F4" };
 const NOTIF_TONE_FG = { info: "var(--color-info)", warning: "var(--color-warning)", danger: "var(--color-danger)", neutral: "var(--color-text-secondary)" };
 
-function TopBar({ onOpenMobileNav, breadcrumb, onNavigate, onLogout }) {
+function TopBar({ onOpenMobileNav, onOpenJump, breadcrumb, onNavigate, onLogout }) {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const notifications = PLACEHOLDER_META["communication.notifications"].rows;
+  useEscape(notifOpen || userMenuOpen, () => { setNotifOpen(false); setUserMenuOpen(false); });
+  const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
+  const [section, page] = breadcrumb.includes(" / ") ? breadcrumb.split(" / ") : [null, breadcrumb];
   return (
-    <header className="sticky top-0 z-[80] h-16 flex items-center gap-3 px-4 md:px-6 shrink-0" style={{ background: "#fff", borderBottom: "1px solid var(--color-border)" }}>
-      <button onClick={onOpenMobileNav} className="aapp-focus md:hidden w-9 h-9 rounded-lg flex items-center justify-center" style={{ color: "var(--color-text-secondary)" }}><Menu size={20} /></button>
-      <div className="min-w-0"><p className="text-sm font-semibold truncate" style={{ color: "var(--color-text-secondary)" }}>{breadcrumb}</p></div>
+    <header className="sticky top-0 z-[80] h-16 flex items-center gap-2 sm:gap-3 px-3 sm:px-4 md:px-6 shrink-0" style={{ background: "#fff", borderBottom: "1px solid var(--color-border)" }}>
+      <button onClick={onOpenMobileNav} aria-label="Open navigation" className="aapp-focus aapp-icon-btn md:hidden w-10 h-10 rounded-lg flex items-center justify-center shrink-0" style={{ color: "var(--color-text-secondary)" }}><Menu size={20} /></button>
+      <nav aria-label="Breadcrumb" className="min-w-0">
+        <p className="text-sm truncate">
+          {section && <span className="hidden sm:inline" style={{ color: "var(--color-text-secondary)" }}>{section}<span aria-hidden="true" className="mx-1.5">/</span></span>}
+          <span className="font-semibold" aria-current="page">{page}</span>
+        </p>
+      </nav>
       <div className="flex-1" />
-      <div className="hidden sm:flex items-center gap-1.5 relative">
-        <button onClick={() => setNotifOpen((o) => !o)} className="aapp-focus relative w-10 h-10 rounded-full inline-flex items-center justify-center" style={{ background: notifOpen ? "var(--color-navy-50)" : "transparent", color: "var(--color-text-secondary)" }}>
+      <button onClick={onOpenJump} aria-label="Jump to page" aria-keyshortcuts={isMac ? "Meta+K" : "Control+K"}
+        className="aapp-focus hidden lg:flex items-center gap-2 rounded-lg pl-3 pr-2 py-2 text-sm w-64" style={{ background: "var(--color-bg)", border: "1px solid var(--color-border)", color: "var(--color-text-secondary)" }}>
+        <Search size={15} aria-hidden="true" />
+        <span className="flex-1 text-left">Jump to page…</span>
+        <kbd className="text-[11px] font-semibold px-1.5 py-0.5 rounded bg-white" style={{ border: "1px solid var(--color-border)" }}>{isMac ? "⌘K" : "Ctrl K"}</kbd>
+      </button>
+      <button onClick={onOpenJump} aria-label="Jump to page" className="aapp-focus aapp-icon-btn lg:hidden w-10 h-10 rounded-full inline-flex items-center justify-center" style={{ color: "var(--color-text-secondary)" }}>
+        <Search size={19} />
+      </button>
+      <div className="flex items-center gap-1.5 relative">
+        <button onClick={() => { setNotifOpen((o) => !o); setUserMenuOpen(false); }} aria-label={`Notifications, ${notifications.length} new`} aria-expanded={notifOpen} aria-haspopup="true"
+          className="aapp-focus aapp-icon-btn relative w-10 h-10 rounded-full inline-flex items-center justify-center" style={{ background: notifOpen ? "var(--color-navy-50)" : undefined, color: "var(--color-text-secondary)" }}>
           <Bell size={19} strokeWidth={2} />
-          <span className="absolute top-1.5 right-1.5 min-w-[16px] h-4 px-1 rounded-full text-[10px] font-bold flex items-center justify-center" style={{ background: "var(--color-danger)", color: "#fff" }}>{notifications.length}</span>
+          <span aria-hidden="true" className="absolute top-1.5 right-1.5 min-w-[16px] h-4 px-1 rounded-full text-[10px] font-bold flex items-center justify-center" style={{ background: "var(--color-danger)", color: "#fff" }}>{notifications.length}</span>
         </button>
         {notifOpen && (
           <>
             <div className="fixed inset-0 z-[95]" onClick={() => setNotifOpen(false)} />
-            <div className="absolute right-0 top-14 w-80 bg-white rounded-2xl shadow-2xl z-[96] aapp-animate-in overflow-hidden" style={{ border: "1px solid var(--color-border)" }}>
+            <div className="absolute -right-12 sm:right-0 top-14 w-[calc(100vw-24px)] max-w-[340px] bg-white rounded-2xl shadow-2xl z-[96] aapp-animate-in overflow-hidden" style={{ border: "1px solid var(--color-border)" }}>
               <div className="px-4 py-3.5 flex items-center justify-between" style={{ borderBottom: "1px solid var(--color-border)" }}>
                 <p className="text-sm font-bold">Notifications</p>
                 <span className="text-xs font-semibold" style={{ color: "var(--color-text-tertiary)" }}>{notifications.length} new</span>
@@ -968,7 +1124,7 @@ function TopBar({ onOpenMobileNav, breadcrumb, onNavigate, onLogout }) {
                   return (
                     <div key={i} className="flex gap-3 px-4 py-3" style={{ borderBottom: "1px solid var(--color-border)" }}>
                       <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ background: NOTIF_TONE_BG[meta.tone] }}>
-                        <meta.icon size={14} style={{ color: NOTIF_TONE_FG[meta.tone] }} />
+                        <meta.icon size={14} aria-hidden="true" style={{ color: NOTIF_TONE_FG[meta.tone] }} />
                       </div>
                       <div className="min-w-0">
                         <p className="text-xs font-semibold leading-snug">{n.message}</p>
@@ -980,7 +1136,7 @@ function TopBar({ onOpenMobileNav, breadcrumb, onNavigate, onLogout }) {
               </div>
               <button
                 onClick={() => { onNavigate("communication.notifications"); setNotifOpen(false); }}
-                className="aapp-focus w-full text-center px-4 py-3 text-xs font-bold"
+                className="aapp-focus aapp-icon-btn w-full text-center px-4 py-3 text-sm font-bold"
                 style={{ color: "var(--color-navy-700)" }}
               >
                 View all notifications
@@ -990,7 +1146,8 @@ function TopBar({ onOpenMobileNav, breadcrumb, onNavigate, onLogout }) {
         )}
       </div>
       <div className="relative ml-1">
-        <button onClick={() => setUserMenuOpen((o) => !o)} className="aapp-focus flex items-center gap-2 pl-1 pr-2 py-1 rounded-full" style={{ background: userMenuOpen ? "var(--color-navy-50)" : "transparent" }}>
+        <button onClick={() => { setUserMenuOpen((o) => !o); setNotifOpen(false); }} aria-label={`Account menu for ${ADMIN.name}`} aria-expanded={userMenuOpen} aria-haspopup="true"
+          className="aapp-focus aapp-icon-btn flex items-center gap-2 pl-1 pr-1 sm:pr-2 py-1 rounded-full" style={{ background: userMenuOpen ? "var(--color-navy-50)" : undefined }}>
           <Avatar initials={ADMIN.initials} size={32} />
           <div className="hidden md:block text-left">
             <p className="text-xs font-semibold leading-tight">{ADMIN.name}</p>
@@ -1006,7 +1163,8 @@ function TopBar({ onOpenMobileNav, breadcrumb, onNavigate, onLogout }) {
                 <Avatar initials={ADMIN.initials} size={40} />
                 <div className="min-w-0"><p className="text-sm font-semibold truncate">{ADMIN.name}</p><p className="text-xs truncate" style={{ color: "var(--color-text-secondary)" }}>{ADMIN.email}</p></div>
               </div>
-              <button onClick={onLogout} className="aapp-focus w-full flex items-center gap-3 px-4 py-2.5 text-sm font-semibold" style={{ color: "var(--color-danger)" }}><LogOut size={16} />Log out</button>
+              <button onClick={() => { setUserMenuOpen(false); onNavigate("settings"); }} className="aapp-focus aapp-icon-btn w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold"><Settings size={16} aria-hidden="true" />Community settings</button>
+              <button onClick={onLogout} className="aapp-focus aapp-icon-btn w-full flex items-center gap-3 px-4 py-3 text-sm font-semibold" style={{ color: "var(--color-danger-fg)", borderTop: "1px solid var(--color-border)" }}><LogOut size={16} aria-hidden="true" />Log out</button>
             </div>
           </>
         )}
@@ -1019,32 +1177,57 @@ function TopBar({ onOpenMobileNav, breadcrumb, onNavigate, onLogout }) {
    DASHBOARD (PHASE 1)
    ============================================================================ */
 
-function Dashboard({ onNavigate }) {
+function AttentionItem({ icon: Icon, tone, title, detail, actionLabel, onClick }) {
+  const fg = `var(--color-${tone}-fg)`;
+  return (
+    <button type="button" onClick={onClick} className="aapp-focus aapp-stat-link flex items-start gap-3 rounded-xl bg-white p-3.5 text-left w-full" style={{ border: "1px solid var(--color-border)" }}>
+      <span className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: `var(--color-${tone}-bg)` }}><Icon size={17} aria-hidden="true" style={{ color: fg }} /></span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-bold">{title}</span>
+        <span className="block text-xs mt-0.5" style={{ color: "var(--color-text-secondary)" }}>{detail}</span>
+      </span>
+      <span className="hidden sm:inline-flex items-center gap-1 text-xs font-semibold shrink-0 self-center" style={{ color: "var(--color-navy-700)" }}>{actionLabel}<ArrowRight size={13} aria-hidden="true" /></span>
+    </button>
+  );
+}
+
+function Dashboard({ onNavigate, users }) {
   const { community, security, finance, operations } = DASHBOARD_STATS;
+  const pendingApprovals = users.filter((u) => u.status === "Pending").length;
   return (
     <div className="max-w-[1280px] mx-auto">
-      <PageHeader title={`Good morning, ${ADMIN.name.split(" ")[0]}`} blurb="Here's how RUhome is doing today." />
+      <PageHeader title={`${greeting()}, ${ADMIN.name.split(" ")[0]}`} blurb="Here's how RUhome is doing today." />
+
+      {/* NEEDS ATTENTION — the things an admin should act on first */}
+      <section aria-labelledby="attention-heading" className="mb-7">
+        <h2 id="attention-heading" className="aapp-heading font-bold text-[15px] mb-3">Needs your attention</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+          <AttentionItem icon={Siren} tone="danger" title={`${security.sosAlerts} SOS alert`} detail="Review the response and close it out" actionLabel="Review" onClick={() => onNavigate("security.sos")} />
+          <AttentionItem icon={Clock} tone="danger" title={`${operations.slaBreaches} SLA breaches`} detail={`${operations.openRequests} service requests still open`} actionLabel="Assign" onClick={() => onNavigate("operations.requests")} />
+          <AttentionItem icon={Wallet} tone="warning" title={`${formatINR(finance.outstanding)} outstanding`} detail="Overdue and pending maintenance bills" actionLabel="Follow up" onClick={() => onNavigate("finance.maintenance")} />
+          <AttentionItem icon={UserCheck} tone="info" title={`${pendingApprovals} pending approval${pendingApprovals === 1 ? "" : "s"}`} detail="New accounts waiting to be activated" actionLabel="Review" onClick={() => onNavigate("users.all")} />
+        </div>
+      </section>
 
       {/* COMMUNITY */}
-      <SectionHeader title="Community" />
-      <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-3 mb-7">
-        <StatCard label="Total Users" value={community.totalUsers} icon={Users} />
-        <StatCard label="Residents" value={community.residents} icon={Home} />
-        <StatCard label="Flats" value={community.flats} icon={Building2} sub={`${community.occupancy}% occupied`} />
-        <StatCard label="Occupancy" value={`${community.occupancy}%`} icon={TrendingUp} tone="var(--color-success)" />
-        <StatCard label="Guards" value={community.guards} icon={Shield} />
-        <StatCard label="Staff" value={community.staff} icon={Briefcase} />
-        <StatCard label="Vendors" value={community.vendors} icon={Store} />
+      <SectionHeader title="Community" action={<SectionLink onClick={() => onNavigate("users.all")}>View users</SectionLink>} />
+      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3 mb-7">
+        <StatCard label="Total Users" value={community.totalUsers} icon={Users} onClick={() => onNavigate("users.all")} />
+        <StatCard label="Residents" value={community.residents} icon={Home} onClick={() => onNavigate("users.residents")} />
+        <StatCard label="Flats" value={community.flats} icon={Building2} sub={`${community.occupancy}% occupied`} onClick={() => onNavigate("community.flats")} />
+        <StatCard label="Guards" value={community.guards} icon={Shield} onClick={() => onNavigate("users.guards")} />
+        <StatCard label="Staff" value={community.staff} icon={Briefcase} onClick={() => onNavigate("users.staff")} />
+        <StatCard label="Vendors" value={community.vendors} icon={Store} onClick={() => onNavigate("operations.vendors")} />
       </div>
 
       {/* SECURITY */}
-      <SectionHeader title="Security" action={<button onClick={() => onNavigate("security.guards")} className="text-xs font-semibold" style={{ color: "var(--color-navy-700)" }}>View security →</button>} />
+      <SectionHeader title="Security" action={<SectionLink onClick={() => onNavigate("security.guards")}>View security</SectionLink>} />
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-7">
         <div className="grid grid-cols-2 gap-3 lg:col-span-2">
-          <StatCard label="Visitors Today" value={security.visitorsToday} icon={UserPlus} />
-          <StatCard label="Active Visitors" value={security.activeVisitors} icon={UserCheck} />
-          <StatCard label="Incidents" value={security.incidents} icon={AlertTriangle} tone="var(--color-warning)" />
-          <StatCard label="SOS Alerts" value={security.sosAlerts} icon={Siren} tone="var(--color-danger)" />
+          <StatCard label="Visitors Today" value={security.visitorsToday} icon={UserPlus} onClick={() => onNavigate("visitors")} />
+          <StatCard label="Active Visitors" value={security.activeVisitors} icon={UserCheck} sub="Inside the community now" onClick={() => onNavigate("visitors")} />
+          <StatCard label="Incidents" value={security.incidents} icon={AlertTriangle} tone="var(--color-warning)" onClick={() => onNavigate("security.incidents")} />
+          <StatCard label="SOS Alerts" value={security.sosAlerts} icon={Siren} tone="var(--color-danger)" onClick={() => onNavigate("security.sos")} />
         </div>
         <Card>
           <p className="text-xs font-semibold mb-3" style={{ color: "var(--color-text-tertiary)" }}>Visitor activity (7 days)</p>
@@ -1060,13 +1243,13 @@ function Dashboard({ onNavigate }) {
       </div>
 
       {/* FINANCE */}
-      <SectionHeader title="Finance" action={<button onClick={() => onNavigate("finance.payments")} className="text-xs font-semibold" style={{ color: "var(--color-navy-700)" }}>View finance →</button>} />
+      <SectionHeader title="Finance" action={<SectionLink onClick={() => onNavigate("finance.payments")}>View finance</SectionLink>} />
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-7">
         <div className="grid grid-cols-2 gap-3 lg:col-span-1">
-          <StatCard label="Collected" value={formatINR(finance.collected)} icon={Wallet} tone="var(--color-success)" />
-          <StatCard label="Outstanding" value={formatINR(finance.outstanding)} icon={AlertTriangle} tone="var(--color-warning)" />
-          <StatCard label="Utility Billed" value={formatINR(finance.utilityBilled)} icon={Receipt} />
-          <StatCard label="Recent Payments" value={finance.recentPayments} icon={CheckCircle2} tone="var(--color-success)" />
+          <StatCard label="Collected" value={formatINR(finance.collected)} icon={Wallet} tone="var(--color-success)" onClick={() => onNavigate("finance.payments")} />
+          <StatCard label="Outstanding" value={formatINR(finance.outstanding)} icon={AlertTriangle} tone="var(--color-warning)" onClick={() => onNavigate("finance.maintenance")} />
+          <StatCard label="Utility Billed" value={formatINR(finance.utilityBilled)} icon={Receipt} onClick={() => onNavigate("finance.utilities")} />
+          <StatCard label="Recent Payments" value={finance.recentPayments} icon={CheckCircle2} tone="var(--color-success)" onClick={() => onNavigate("finance.payments")} />
         </div>
         <Card className="lg:col-span-2">
           <p className="text-xs font-semibold mb-3" style={{ color: "var(--color-text-tertiary)" }}>Maintenance collection trend</p>
@@ -1085,12 +1268,12 @@ function Dashboard({ onNavigate }) {
       {/* OPERATIONS + ACTIVITY */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2">
-          <SectionHeader title="Operations" action={<button onClick={() => onNavigate("operations.requests")} className="text-xs font-semibold" style={{ color: "var(--color-navy-700)" }}>View requests →</button>} />
+          <SectionHeader title="Operations" action={<SectionLink onClick={() => onNavigate("operations.requests")}>View requests</SectionLink>} />
           <div className="grid grid-cols-2 gap-3 mb-4">
-            <StatCard label="Open Requests" value={operations.openRequests} icon={Wrench} />
-            <StatCard label="SLA Breaches" value={operations.slaBreaches} icon={AlertTriangle} tone="var(--color-danger)" />
-            <StatCard label="Amenity Bookings" value={operations.amenityBookings} icon={CalendarCheck} />
-            <StatCard label="Marketplace Orders" value={operations.marketplaceOrders} icon={Store} />
+            <StatCard label="Open Requests" value={operations.openRequests} icon={Wrench} onClick={() => onNavigate("operations.requests")} />
+            <StatCard label="SLA Breaches" value={operations.slaBreaches} icon={AlertTriangle} tone="var(--color-danger)" onClick={() => onNavigate("operations.requests")} />
+            <StatCard label="Amenity Bookings" value={operations.amenityBookings} icon={CalendarCheck} onClick={() => onNavigate("community.amenities")} />
+            <StatCard label="Marketplace Orders" value={operations.marketplaceOrders} icon={Store} onClick={() => onNavigate("marketplace.orders")} />
           </div>
           <Card>
             <p className="text-xs font-semibold mb-3" style={{ color: "var(--color-text-tertiary)" }}>Requests by category</p>
@@ -1110,8 +1293,8 @@ function Dashboard({ onNavigate }) {
             <div className="flex flex-col divide-y" style={{ borderColor: "var(--color-border)" }}>
               {RECENT_ACTIVITY.map((a) => (
                 <div key={a.id} className="flex items-start gap-3 px-4 py-3.5">
-                  <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ background: "var(--color-navy-50)" }}><a.icon size={14} style={{ color: "var(--color-navy-700)" }} /></div>
-                  <div className="min-w-0"><p className="text-xs leading-snug">{a.text}</p><p className="text-[11px] mt-0.5" style={{ color: "var(--color-text-tertiary)" }}>{a.time}</p></div>
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ background: "var(--color-navy-50)" }}><a.icon size={14} aria-hidden="true" style={{ color: "var(--color-navy-700)" }} /></div>
+                  <div className="min-w-0"><p className="text-sm leading-snug">{a.text}</p><p className="text-xs mt-0.5" style={{ color: "var(--color-text-tertiary)" }}>{a.time}</p></div>
                 </div>
               ))}
             </div>
@@ -1126,14 +1309,14 @@ function Dashboard({ onNavigate }) {
    ROLE-SPECIFIC FORM FIELD SETS (Create/Edit User)
    ============================================================================ */
 
-function ResidentFields({ form, setForm }) {
+function ResidentFields({ form, setForm, errors = {} }) {
   return (
     <>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Full name"><TextInput placeholder="e.g. Ananya Rao" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
-        <Field label="Mobile number"><TextInput placeholder="98450 12345" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></Field>
+        <Field label="Full name" required error={errors.name}><TextInput invalid={!!errors.name} autoFocus placeholder="e.g. Ananya Rao" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
+        <Field label="Mobile number" required error={errors.phone}><TextInput type="tel" inputMode="tel" invalid={!!errors.phone} placeholder="98450 12345" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></Field>
       </div>
-      <Field label="Email"><TextInput type="email" placeholder="name@example.com" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></Field>
+      <Field label="Email" error={errors.email}><TextInput type="email" invalid={!!errors.email} placeholder="name@example.com" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Tower / Building">
           <Select value={form.tower} onChange={(e) => setForm({ ...form, tower: e.target.value })}>
@@ -1164,16 +1347,16 @@ function ResidentFields({ form, setForm }) {
   );
 }
 
-function GuardFields({ form, setForm }) {
+function GuardFields({ form, setForm, errors = {} }) {
   return (
     <>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Full name"><TextInput placeholder="e.g. Suresh Kumar" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
+        <Field label="Full name" required error={errors.name}><TextInput invalid={!!errors.name} autoFocus placeholder="e.g. Suresh Kumar" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
         <Field label="Employee ID"><TextInput placeholder="SEC-1044" value={form.employeeId} onChange={(e) => setForm({ ...form, employeeId: e.target.value })} /></Field>
       </div>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Mobile number"><TextInput placeholder="90000 55123" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></Field>
-        <Field label="Email (optional)"><TextInput type="email" placeholder="name@example.com" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></Field>
+        <Field label="Mobile number" required error={errors.phone}><TextInput type="tel" inputMode="tel" invalid={!!errors.phone} placeholder="90000 55123" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></Field>
+        <Field label="Email (optional)" error={errors.email}><TextInput type="email" invalid={!!errors.email} placeholder="name@example.com" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></Field>
       </div>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Assigned gate">
@@ -1187,12 +1370,12 @@ function GuardFields({ form, setForm }) {
   );
 }
 
-function StaffFields({ form, setForm }) {
+function StaffFields({ form, setForm, errors = {} }) {
   return (
     <>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Full name"><TextInput placeholder="e.g. Lakshmi Devi" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
-        <Field label="Mobile number"><TextInput placeholder="98765 11223" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></Field>
+        <Field label="Full name" required error={errors.name}><TextInput invalid={!!errors.name} autoFocus placeholder="e.g. Lakshmi Devi" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
+        <Field label="Mobile number" required error={errors.phone}><TextInput type="tel" inputMode="tel" invalid={!!errors.phone} placeholder="98765 11223" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></Field>
       </div>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Worker type">
@@ -1218,16 +1401,16 @@ function StaffFields({ form, setForm }) {
   );
 }
 
-function VendorFields({ form, setForm }) {
+function VendorFields({ form, setForm, errors = {} }) {
   return (
     <>
-      <Field label="Vendor name"><TextInput placeholder="e.g. Fresh Mart Grocery" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
+      <Field label="Vendor name" required error={errors.name}><TextInput invalid={!!errors.name} autoFocus placeholder="e.g. Fresh Mart Grocery" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Contact person"><TextInput placeholder="e.g. Anil Gupta" value={form.contactPerson} onChange={(e) => setForm({ ...form, contactPerson: e.target.value })} /></Field>
-        <Field label="Mobile number"><TextInput placeholder="90111 22334" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></Field>
+        <Field label="Mobile number" required error={errors.phone}><TextInput type="tel" inputMode="tel" invalid={!!errors.phone} placeholder="90111 22334" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></Field>
       </div>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Email"><TextInput type="email" placeholder="contact@vendor.in" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></Field>
+        <Field label="Email" error={errors.email}><TextInput type="email" invalid={!!errors.email} placeholder="contact@vendor.in" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></Field>
         <Field label="Category">
           <Select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}><option value="">Select category</option>{VENDOR_CATEGORIES.map((c) => <option key={c}>{c}</option>)}</Select>
         </Field>
@@ -1237,15 +1420,15 @@ function VendorFields({ form, setForm }) {
   );
 }
 
-function AdminRoleFields({ form, setForm }) {
+function AdminRoleFields({ form, setForm, errors = {} }) {
   return (
     <>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Full name"><TextInput placeholder="e.g. Deepak Verma" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
-        <Field label="Mobile number"><TextInput placeholder="99887 76655" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></Field>
+        <Field label="Full name" required error={errors.name}><TextInput invalid={!!errors.name} autoFocus placeholder="e.g. Deepak Verma" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
+        <Field label="Mobile number" required error={errors.phone}><TextInput type="tel" inputMode="tel" invalid={!!errors.phone} placeholder="99887 76655" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></Field>
       </div>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Email"><TextInput type="email" placeholder="name@ruhome.in" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></Field>
+        <Field label="Email" error={errors.email}><TextInput type="email" invalid={!!errors.email} placeholder="name@ruhome.in" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></Field>
         <Field label="Department / title"><TextInput placeholder="e.g. Operations" value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} /></Field>
       </div>
     </>
@@ -1290,11 +1473,33 @@ function CreateUserWizard({ open, onClose, onCreate }) {
   const [created, setCreated] = useState(null);
   const [copied, setCopied] = useState(false);
   const [resent, setResent] = useState(false);
+  const [errors, setErrors] = useState({});
 
   const isAdminRole = role && ADMIN_ROLE_KEYS.includes(role);
   const steps = isAdminRole ? WIZARD_STEPS : WIZARD_STEPS.filter((s) => s !== "Permissions");
 
-  const reset = () => { setStep(0); setRole(null); setForm({}); setPermissions({}); setCreated(null); setCopied(false); setResent(false); };
+  const reset = () => { setStep(0); setRole(null); setForm({}); setPermissions({}); setCreated(null); setCopied(false); setResent(false); setErrors({}); };
+
+  // Validate the Information step before letting the admin move on.
+  const validateInfo = () => {
+    const e = {};
+    if (!form.name?.trim()) e.name = role === "Vendor" ? "Enter the vendor's name" : "Enter the person's full name";
+    const digits = (form.phone || "").replace(/\D/g, "");
+    if (!digits) e.phone = "Enter a mobile number — the invite is sent here";
+    else if (digits.length < 10) e.phone = "Mobile number should have at least 10 digits";
+    if (form.email && !/^\S+@\S+\.\S+$/.test(form.email)) e.email = "Enter a valid email address, e.g. name@example.com";
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  };
+  const updateForm = (next) => {
+    setForm(next);
+    // Clear an error as soon as the admin edits that field.
+    if (Object.keys(errors).length) setErrors((prev) => Object.fromEntries(Object.entries(prev).filter(([k]) => next[k] === form[k])));
+  };
+  const goNext = () => {
+    if (step === 1 && !validateInfo()) return;
+    setStep((s) => s + 1);
+  };
   const handleClose = () => { onClose(); reset(); };
 
   const selectRole = (r) => {
@@ -1328,11 +1533,11 @@ function CreateUserWizard({ open, onClose, onCreate }) {
         isSuccessStep ? <Button variant="primary" className="w-full" onClick={handleClose}>Done</Button> :
         step === 0 ? <Button variant="secondary" onClick={handleClose}>Cancel</Button> :
         <>
-          <Button variant="secondary" icon={ArrowLeft} onClick={() => setStep((s) => s - 1)}>Back</Button>
+          <Button variant="secondary" icon={ArrowLeft} onClick={() => { setErrors({}); setStep((s) => s - 1); }}>Back</Button>
           {isReviewStep ? (
             <Button variant="primary" icon={CheckCircle2} onClick={handleCreate}>Create User</Button>
           ) : (
-            <Button variant="primary" iconRight={ArrowRight} onClick={() => setStep((s) => s + 1)}>
+            <Button variant="primary" iconRight={ArrowRight} onClick={goNext}>
               {step === stepIndex("Permissions") || (step === stepIndex("Community Info") && !isAdminRole) ? "Review" : "Next"}
             </Button>
           )}
@@ -1341,27 +1546,26 @@ function CreateUserWizard({ open, onClose, onCreate }) {
     >
       {/* Step indicator */}
       {!isSuccessStep && (
-        <div className="flex items-center gap-1.5 mb-6">
+        <ol aria-label="Progress" className="flex items-center gap-1.5 mb-6">
           {steps.map((s, i) => (
             <React.Fragment key={s}>
-              <div className="flex flex-col items-center gap-1">
-                <div className="w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold" style={{ background: i <= step ? "var(--color-navy-800)" : "var(--color-border)", color: i <= step ? "#fff" : "var(--color-text-tertiary)" }}>
-                  {i < step ? <Check size={12} /> : i + 1}
+              <li aria-current={i === step ? "step" : undefined} className="flex flex-col items-center gap-1">
+                <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold" style={{ background: i <= step ? "var(--color-navy-800)" : "var(--color-border)", color: i <= step ? "#fff" : "var(--color-text-secondary)", boxShadow: i === step ? "0 0 0 3px var(--color-navy-50)" : "none" }}>
+                  {i < step ? <Check size={13} aria-hidden="true" /> : i + 1}
                 </div>
-                <span className="text-[10px] font-semibold" style={{ color: i <= step ? "var(--color-text-primary)" : "var(--color-text-tertiary)" }}>{s}</span>
-              </div>
-              {i < steps.length - 1 && <div className="flex-1 h-0.5" style={{ background: i < step ? "var(--color-navy-800)" : "var(--color-border)" }} />}
+                <span className={`text-[11px] font-semibold ${i === step ? "" : "hidden sm:block"}`} style={{ color: i <= step ? "var(--color-text-primary)" : "var(--color-text-secondary)" }}>{s}</span>
+              </li>
+              {i < steps.length - 1 && <div aria-hidden="true" className="flex-1 h-0.5 mb-4" style={{ background: i < step ? "var(--color-navy-800)" : "var(--color-border)" }} />}
             </React.Fragment>
           ))}
-        </div>
+        </ol>
       )}
 
       {/* STEP: Role select */}
       {step === 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
           {ROLES.map((r) => (
-            <button key={r.key} onClick={() => selectRole(r.key)} className="aapp-focus flex flex-col items-start gap-2 rounded-xl p-4 text-left" style={{ border: "1px solid var(--color-border)" }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--color-bg)")} onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
+            <button key={r.key} onClick={() => selectRole(r.key)} className="aapp-focus aapp-stat-link flex flex-col items-start gap-2 rounded-xl p-4 text-left" style={{ border: "1px solid var(--color-border)" }}>
               <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: "var(--color-navy-50)" }}><r.icon size={17} style={{ color: "var(--color-navy-700)" }} /></div>
               <span className="text-sm font-bold">{r.label}</span>
               <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>{r.desc}</span>
@@ -1371,11 +1575,12 @@ function CreateUserWizard({ open, onClose, onCreate }) {
       )}
 
       {/* STEP: Information (role-dependent) */}
-      {step === 1 && role === "Resident" && <ResidentFields form={form} setForm={setForm} />}
-      {step === 1 && role === "Guard" && <GuardFields form={form} setForm={setForm} />}
-      {step === 1 && role === "Staff" && <StaffFields form={form} setForm={setForm} />}
-      {step === 1 && role === "Vendor" && <VendorFields form={form} setForm={setForm} />}
-      {step === 1 && isAdminRole && <AdminRoleFields form={form} setForm={setForm} />}
+      {step === 1 && <p className="text-xs mb-4" style={{ color: "var(--color-text-secondary)" }}>Fields marked <span style={{ color: "var(--color-danger)" }}>*</span> are required.</p>}
+      {step === 1 && role === "Resident" && <ResidentFields form={form} setForm={updateForm} errors={errors} />}
+      {step === 1 && role === "Guard" && <GuardFields form={form} setForm={updateForm} errors={errors} />}
+      {step === 1 && role === "Staff" && <StaffFields form={form} setForm={updateForm} errors={errors} />}
+      {step === 1 && role === "Vendor" && <VendorFields form={form} setForm={updateForm} errors={errors} />}
+      {step === 1 && isAdminRole && <AdminRoleFields form={form} setForm={updateForm} errors={errors} />}
 
       {/* STEP: Community Info */}
       {step === 2 && (
@@ -1480,8 +1685,10 @@ function CreateUserWizard({ open, onClose, onCreate }) {
    ============================================================================ */
 
 function UserDetailsDrawer({ user, onClose, onActivate, onDeactivate, onSuspend, onResetAccess }) {
-  if (!user) return null;
+  // Hook must run on every render (before the early return) — calling it only
+  // when a user is selected breaks React's hook ordering.
   const [confirmAction, setConfirmAction] = useState(null);
+  if (!user) return null;
   const roleFields = {
     Resident: [["Tower", user.tower], ["Flat", user.flat], ["Resident type", user.residentType], ["Family members", user.family], ["Vehicles", user.vehicles], ["Outstanding", user.outstanding != null ? formatINR(user.outstanding) : null]],
     Guard: [["Employee ID", user.employeeId], ["Gate", user.gate], ["Shift", user.shift]],
@@ -1494,11 +1701,11 @@ function UserDetailsDrawer({ user, onClose, onActivate, onDeactivate, onSuspend,
       <Drawer open={!!user} onClose={onClose} title={user.name} subtitle={user.role}
         footer={
           <div className="flex flex-wrap gap-2 w-full">
-            <Button variant="secondary" icon={Pencil} size="sm">Edit</Button>
             <Button variant="secondary" icon={KeyRound} size="sm" onClick={() => onResetAccess(user)}>Reset access</Button>
-            {user.status !== "Active" && <Button variant="secondary" icon={Power} size="sm" onClick={() => setConfirmAction("activate")}>Activate</Button>}
-            {user.status === "Active" && <Button variant="secondary" icon={Ban} size="sm" onClick={() => setConfirmAction("deactivate")} style={{ color: "var(--color-warning)" }}>Deactivate</Button>}
-            <Button variant="danger" icon={UserX} size="sm" onClick={() => setConfirmAction("suspend")}>Suspend</Button>
+            {user.status !== "Active" && <Button variant="primary" icon={Power} size="sm" onClick={() => setConfirmAction("activate")}>Activate</Button>}
+            {user.status === "Active" && <Button variant="secondary" icon={Ban} size="sm" onClick={() => setConfirmAction("deactivate")} style={{ color: "var(--color-warning-fg)" }}>Deactivate</Button>}
+            <div className="flex-1" />
+            {user.status !== "Suspended" && <Button variant="ghost" icon={UserX} size="sm" onClick={() => setConfirmAction("suspend")} style={{ color: "var(--color-danger-fg)" }}>Suspend</Button>}
           </div>
         }
       >
@@ -1506,11 +1713,15 @@ function UserDetailsDrawer({ user, onClose, onActivate, onDeactivate, onSuspend,
           <Avatar initials={initialsOf(user.name)} size={56} />
           <div><StatusBadge status={user.status} /><p className="text-xs mt-1.5" style={{ color: "var(--color-text-tertiary)" }}>Created {user.createdOn} · {user.id}</p></div>
         </div>
+        <div className="flex gap-2 mb-4">
+          {user.phone && user.phone !== "—" && <a href={`tel:${user.phone.replace(/\s/g, "")}`} className="aapp-focus aapp-btn flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm" style={{ border: "1px solid var(--color-border)" }}><Phone size={15} aria-hidden="true" />Call</a>}
+          {user.email && <a href={`mailto:${user.email}`} className="aapp-focus aapp-btn flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm" style={{ border: "1px solid var(--color-border)" }}><Mail size={15} aria-hidden="true" />Email</a>}
+        </div>
         <Card className="mb-4">
-          <div className="flex justify-between text-sm py-1.5"><span style={{ color: "var(--color-text-secondary)" }}>Phone</span><span className="font-semibold">{user.phone}</span></div>
-          {user.email && <div className="flex justify-between text-sm py-1.5"><span style={{ color: "var(--color-text-secondary)" }}>Email</span><span className="font-semibold">{user.email}</span></div>}
+          <div className="flex justify-between gap-4 text-sm py-1.5"><span style={{ color: "var(--color-text-secondary)" }}>Phone</span><span className="font-semibold text-right">{user.phone}</span></div>
+          {user.email && <div className="flex justify-between gap-4 text-sm py-1.5"><span style={{ color: "var(--color-text-secondary)" }}>Email</span><span className="font-semibold text-right break-all">{user.email}</span></div>}
           {roleFields.map(([label, val]) => val != null && val !== "" ? (
-            <div key={label} className="flex justify-between text-sm py-1.5"><span style={{ color: "var(--color-text-secondary)" }}>{label}</span><span className="font-semibold">{String(val)}</span></div>
+            <div key={label} className="flex justify-between gap-4 text-sm py-1.5"><span style={{ color: "var(--color-text-secondary)" }}>{label}</span><span className="font-semibold text-right">{String(val)}</span></div>
           ) : null)}
         </Card>
         {ADMIN_ROLE_KEYS.includes(user.role) && user.permissions && (
@@ -1572,8 +1783,13 @@ function AllUsersPage({ users, onCreateClick, onRowClick }) {
         <div className="p-4 pb-0">
           <TableToolbar search={search} onSearch={setSearch} placeholder="Search by name or phone…" filters={
             <>
-              <Select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} className="!w-auto"><option>All</option>{ROLES.map((r) => <option key={r.key}>{r.key}</option>)}</Select>
-              <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="!w-auto"><option>All</option><option>Active</option><option>Inactive</option><option>Suspended</option><option>Pending</option></Select>
+              <div className="grid grid-cols-2 sm:flex gap-3">
+                <Select aria-label="Filter by role" value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}><option value="All">All roles</option>{ROLES.map((r) => <option key={r.key} value={r.key}>{r.label}</option>)}</Select>
+                <Select aria-label="Filter by status" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}><option value="All">All statuses</option><option>Active</option><option>Inactive</option><option>Suspended</option><option>Pending</option></Select>
+              </div>
+              {(roleFilter !== "All" || statusFilter !== "All" || search) && (
+                <Button variant="ghost" size="sm" icon={X} onClick={() => { setRoleFilter("All"); setStatusFilter("All"); setSearch(""); }}>Clear filters</Button>
+              )}
             </>
           } />
         </div>
@@ -1660,24 +1876,77 @@ function renderCell(row, col) {
 
 function GenericTablePage({ routeKey }) {
   const meta = PLACEHOLDER_META[routeKey];
+  const addLabel = ADD_LABELS[routeKey] || meta.title;
+  const blankForm = () => Object.fromEntries(meta.columns.map((c) => [c.key, ""]));
+
+  const [rows, setRows] = useState(meta.rows);
   const [search, setSearch] = useState("");
+  const [addOpen, setAddOpen] = useState(false);
+  const [addForm, setAddForm] = useState(blankForm);
+  const [detailRow, setDetailRow] = useState(null);
+
+  const [addError, setAddError] = useState("");
+
   const columns = meta.columns.map((c) => ({ ...c, render: (row) => renderCell(row, c) }));
   const searchKey = meta.columns[0].key;
   const filtered = search
-    ? meta.rows.filter((r) => Object.values(r).some((v) => String(v).toLowerCase().includes(search.toLowerCase())))
-    : meta.rows;
+    ? rows.filter((r) => Object.values(r).some((v) => String(v).toLowerCase().includes(search.toLowerCase())))
+    : rows;
+
+  const closeAdd = () => { setAddOpen(false); setAddError(""); };
+  const handleAdd = (e) => {
+    e?.preventDefault();
+    if (!String(addForm[searchKey] || "").trim()) { setAddError(`${meta.columns[0].label} is required`); return; }
+    setRows((prev) => [{ ...addForm }, ...prev]);
+    setAddForm(blankForm());
+    closeAdd();
+  };
+
   return (
     <div>
-      <PageHeader title={meta.title} blurb={meta.blurb} action={<Button variant="primary" icon={Plus}>Add {ADD_LABELS[routeKey] || meta.title}</Button>} />
+      <PageHeader title={meta.title} blurb={meta.blurb} action={<Button variant="primary" icon={Plus} onClick={() => setAddOpen(true)}>Add {addLabel}</Button>} />
       <Card padded={false}>
         <div className="p-4 pb-0">
           <TableToolbar search={search} onSearch={setSearch} placeholder={`Search ${meta.title.toLowerCase()}…`} />
         </div>
-        <DataTable columns={columns} rows={filtered} emptyIcon={meta.icon} emptyTitle={`No ${meta.title.toLowerCase()} found`} emptyBody="Try adjusting your search." />
+        <DataTable columns={columns} rows={filtered} onRowClick={setDetailRow} emptyIcon={meta.icon} emptyTitle={`No ${meta.title.toLowerCase()} found`} emptyBody="Try adjusting your search." />
         <div className="px-4 py-3 text-xs" style={{ color: "var(--color-text-tertiary)", borderTop: "1px solid var(--color-border)" }}>
-          Showing {filtered.length} of {meta.rows.length}{searchKey ? "" : ""}
+          Showing {filtered.length} of {rows.length}{searchKey ? "" : ""}
         </div>
       </Card>
+
+      <Modal
+        open={addOpen}
+        onClose={closeAdd}
+        title={`Add ${addLabel}`}
+        subtitle={`Create a new ${addLabel.toLowerCase()} record.`}
+        footer={<>
+          <Button variant="secondary" onClick={closeAdd}>Cancel</Button>
+          <Button variant="primary" type="submit" form="aapp-add-form">Add {addLabel}</Button>
+        </>}
+      >
+        <form id="aapp-add-form" onSubmit={handleAdd} noValidate>
+          {meta.columns.map((c, i) => (
+            <Field key={c.key} label={c.label} required={i === 0} error={i === 0 ? addError : undefined}>
+              <TextInput
+                autoFocus={i === 0}
+                invalid={i === 0 && !!addError}
+                type={c.type === "currency" ? "number" : "text"}
+                inputMode={c.type === "currency" ? "decimal" : undefined}
+                value={addForm[c.key] || ""}
+                onChange={(e) => { setAddForm((f) => ({ ...f, [c.key]: e.target.value })); if (i === 0) setAddError(""); }}
+                placeholder={c.type === "currency" ? "Amount in ₹" : `Enter ${c.label.toLowerCase()}`}
+              />
+            </Field>
+          ))}
+        </form>
+      </Modal>
+
+      <Drawer open={!!detailRow} onClose={() => setDetailRow(null)} title={detailRow ? String(detailRow[searchKey] ?? meta.title) : ""} subtitle={meta.title}>
+        {detailRow && meta.columns.map((c) => (
+          <InfoRow key={c.key} label={c.label} value={detailRow[c.key] ?? "—"} />
+        ))}
+      </Drawer>
     </div>
   );
 }
@@ -1811,6 +2080,20 @@ export default function AdminApp({ onExitToPortal }) {
   const [wizardOpen, setWizardOpen] = useState(false);
   const [detailUser, setDetailUser] = useState(null);
   const [collapsed, setCollapsed] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [jumpOpen, setJumpOpen] = useState(false);
+
+  // Ctrl/⌘ + K opens the quick jump from anywhere.
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") { e.preventDefault(); setJumpOpen((o) => !o); }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
+
+  // New page → start at the top, like a real navigation.
+  useEffect(() => { window.scrollTo(0, 0); }, [route]);
 
   const pushToast = (t) => {
     const id = Math.random().toString(36).slice(2);
@@ -1841,7 +2124,7 @@ export default function AdminApp({ onExitToPortal }) {
   };
 
   const PAGES = {
-    dashboard: <Dashboard onNavigate={setRoute} />,
+    dashboard: <Dashboard onNavigate={setRoute} users={users} />,
     "users.all": <AllUsersPage users={users} onCreateClick={() => setWizardOpen(true)} onRowClick={setDetailUser} />,
     "users.residents": <RoleListPage title="Residents" blurb="Manage resident accounts and their flat association." users={users} role="Resident" onCreateClick={() => setWizardOpen(true)} onRowClick={setDetailUser} emptyIcon={Home}
       columns={[
@@ -1875,18 +2158,21 @@ export default function AdminApp({ onExitToPortal }) {
     "settings": <SettingsPage />,
   };
 
-  const page = PAGES[route] || (PLACEHOLDER_META[route]?.rows ? <GenericTablePage routeKey={route} /> : <PlaceholderPage routeKey={route} />);
+  const page = PAGES[route] || (PLACEHOLDER_META[route]?.rows ? <GenericTablePage key={route} routeKey={route} /> : <PlaceholderPage routeKey={route} />);
 
   return (
     <div className="aapp-root">
       <GlobalStyles />
       <div className="min-h-screen flex" style={{ background: "var(--color-bg)" }}>
-        <Sidebar route={route} onNavigate={setRoute} collapsed={collapsed} onToggleCollapse={() => setCollapsed((c) => !c)} />
+        <a href="#aapp-main" className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[400] focus:rounded-lg focus:px-4 focus:py-2 focus:bg-white focus:shadow-lg text-sm font-semibold">Skip to content</a>
+        <Sidebar route={route} onNavigate={setRoute} collapsed={collapsed} onToggleCollapse={() => setCollapsed((c) => !c)} mobileOpen={mobileNavOpen} onCloseMobile={() => setMobileNavOpen(false)} />
         <div className="flex-1 min-w-0 flex flex-col">
-          <TopBar onOpenMobileNav={() => {}} breadcrumb={breadcrumbFor(route)} onNavigate={setRoute} onLogout={() => { pushToast({ title: "Logged out", body: "You have been signed out safely.", tone: "success" }); setTimeout(() => onExitToPortal?.(), 300); }} />
-          <main className="flex-1 p-4 md:p-7 aapp-animate-in max-w-full overflow-x-hidden">{page}</main>
+          <TopBar onOpenMobileNav={() => setMobileNavOpen(true)} onOpenJump={() => setJumpOpen(true)} breadcrumb={breadcrumbFor(route)} onNavigate={setRoute} onLogout={() => { pushToast({ title: "Logged out", body: "You have been signed out safely.", tone: "success" }); setTimeout(() => onExitToPortal?.(), 300); }} />
+          <main id="aapp-main" key={route} tabIndex={-1} className="flex-1 p-4 md:p-7 aapp-animate-in max-w-full overflow-x-hidden outline-none">{page}</main>
         </div>
       </div>
+
+      <QuickJump open={jumpOpen} onClose={() => setJumpOpen(false)} onNavigate={setRoute} />
 
       <CreateUserWizard open={wizardOpen} onClose={() => setWizardOpen(false)} onCreate={handleCreateUser} />
       <UserDetailsDrawer

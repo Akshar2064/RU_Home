@@ -1,10 +1,9 @@
 import React, { useState } from "react";
-import { Home, ShieldCheck, ShieldPlus, Building2, Lock, Loader2, ChevronRight } from "lucide-react";
+import { Home, ShieldCheck, ShieldPlus, Building2, Lock, Loader2, ChevronRight, Eye, EyeOff } from "lucide-react";
 
 function GlobalStyles() {
   return (
     <style>{`
-      @import url('https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
 
       :root {
         --color-navy-900: #14213D;
@@ -19,7 +18,7 @@ function GlobalStyles() {
         --color-marigold-50: #FDF3DE;
         --color-text-primary: #1A2130;
         --color-text-secondary: #626B80;
-        --color-text-tertiary: #9198A9;
+        --color-text-tertiary: #697184;
         --color-success: #2F9E68;
         --color-success-bg: #E7F6EE;
         --color-danger: #D64545;
@@ -59,11 +58,20 @@ const ROLE_CARDS = [
 
 const ROLE_LABELS = { resident: "Resident", head_guard: "Head Guard", admin: "Admin" };
 
+// Per-role identifier field — label, placeholder and the right mobile keyboard / autofill hint.
+const IDENTIFIER_FIELD = {
+  resident: { label: "Mobile number or email", placeholder: "+91 98765 43210", type: "text", inputMode: "email", autoComplete: "username" },
+  head_guard: { label: "Mobile number or Employee ID", placeholder: "HG-2001 or +91 98450 12233", type: "text", inputMode: "text", autoComplete: "username" },
+  admin: { label: "Work email", placeholder: "you@ruhome.example", type: "email", inputMode: "email", autoComplete: "email" },
+};
+
 export default function PortalLogin({ onEnter }) {
   const [role, setRole] = useState("resident");
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const idField = IDENTIFIER_FIELD[role];
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -105,11 +113,11 @@ export default function PortalLogin({ onEnter }) {
             {ROLE_CARDS.map((r) => (
               <div key={r.key} className="flex items-center gap-3 rounded-xl p-3" style={{ background: "rgba(255,255,255,.06)" }}>
                 <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg" style={{ background: "rgba(255,255,255,.12)" }}>
-                  <r.icon size={17} />
+                  <r.icon size={17} aria-hidden="true" />
                 </span>
                 <div>
-                  <p className="text-xs font-bold">{r.title} experience</p>
-                  <p className="mt-0.5 text-[11px]" style={{ color: "#AEB9D1" }}>{r.desc}</p>
+                  <p className="text-sm font-bold">{r.title} experience</p>
+                  <p className="mt-0.5 text-xs leading-relaxed" style={{ color: "#C3CCE0" }}>{r.desc}</p>
                 </div>
               </div>
             ))}
@@ -125,22 +133,24 @@ export default function PortalLogin({ onEnter }) {
           </div>
 
           <h2 className="portal-heading text-xl font-bold" style={{ color: "var(--color-text-primary)" }}>Sign in to the portal</h2>
-          <p className="mt-1.5 text-xs" style={{ color: "var(--color-text-secondary)" }}>Choose how you're signing in, then enter your details.</p>
+          <p className="mt-1.5 text-sm" style={{ color: "var(--color-text-secondary)" }}>Choose how you're signing in, then enter your details.</p>
 
-          <div className="mt-6 grid grid-cols-3 gap-2 rounded-2xl p-1.5" style={{ background: "var(--color-navy-50)" }}>
+          <div role="radiogroup" aria-label="Sign in as" className="mt-6 grid grid-cols-3 gap-2 rounded-2xl p-1.5" style={{ background: "var(--color-navy-50)" }}>
             {ROLE_CARDS.map((r) => {
               const active = role === r.key;
               return (
                 <button
                   key={r.key}
                   type="button"
+                  role="radio"
+                  aria-checked={active}
                   onClick={() => setRole(r.key)}
-                  className={`portal-focus flex flex-col items-center gap-1.5 rounded-xl px-3 py-3 text-xs font-bold transition ${active ? "shadow-sm" : ""}`}
+                  className={`portal-focus flex flex-col items-center gap-1.5 rounded-xl px-2 py-3 text-xs sm:text-sm font-bold transition ${active ? "shadow-sm" : "hover:bg-white/60"}`}
                   style={active
                     ? { background: "var(--color-surface)", color: "var(--color-navy-900)" }
-                    : { color: "var(--color-text-tertiary)" }}
+                    : { color: "var(--color-text-secondary)" }}
                 >
-                  <r.icon size={18} />
+                  <r.icon size={18} aria-hidden="true" />
                   {r.title}
                 </button>
               );
@@ -149,31 +159,49 @@ export default function PortalLogin({ onEnter }) {
 
           <form onSubmit={handleSubmit} className="mt-6 space-y-4">
             <div>
-              <label className="mb-1.5 block text-xs font-bold" style={{ color: "var(--color-text-secondary)" }}>
-                {role === "admin" ? "Work email" : role === "head_guard" ? "Mobile number / Employee ID" : "Mobile number or email"}
+              <label htmlFor="portal-identifier" className="mb-1.5 block text-sm font-semibold" style={{ color: "var(--color-text-primary)" }}>
+                {idField.label}
               </label>
               <input
+                id="portal-identifier"
                 required
+                type={idField.type}
+                inputMode={idField.inputMode}
+                autoComplete={idField.autoComplete}
+                autoCapitalize="none"
+                spellCheck={false}
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value)}
-                placeholder={role === "admin" ? "you@ruhome.example" : role === "head_guard" ? "HG-2001 or +91 98450 12233" : "+91 98765 43210"}
-                className="portal-focus w-full rounded-xl px-3.5 py-3 text-sm outline-none"
+                placeholder={idField.placeholder}
+                className="portal-focus w-full rounded-xl px-3.5 py-3 text-base sm:text-sm outline-none"
                 style={{ border: "1px solid var(--color-border)", background: "var(--color-bg)" }}
               />
             </div>
             <div>
-              <label className="mb-1.5 block text-xs font-bold" style={{ color: "var(--color-text-secondary)" }}>Password</label>
+              <label htmlFor="portal-password" className="mb-1.5 block text-sm font-semibold" style={{ color: "var(--color-text-primary)" }}>Password</label>
               <div className="relative">
-                <Lock size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: "var(--color-text-tertiary)" }} />
+                <Lock size={15} aria-hidden="true" className="absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: "var(--color-text-tertiary)" }} />
                 <input
+                  id="portal-password"
                   required
-                  type="password"
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="portal-focus w-full rounded-xl pl-9 pr-3.5 py-3 text-sm outline-none"
+                  className="portal-focus w-full rounded-xl pl-9 pr-12 py-3 text-base sm:text-sm outline-none"
                   style={{ border: "1px solid var(--color-border)", background: "var(--color-bg)" }}
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((s) => !s)}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  aria-pressed={showPassword}
+                  className="portal-focus absolute right-1.5 top-1/2 -translate-y-1/2 w-10 h-10 rounded-lg flex items-center justify-center hover:bg-black/5"
+                  style={{ color: "var(--color-text-secondary)" }}
+                >
+                  {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+                </button>
               </div>
             </div>
 
@@ -183,12 +211,12 @@ export default function PortalLogin({ onEnter }) {
               className="portal-focus w-full flex items-center justify-center gap-2 rounded-xl py-3.5 text-sm font-bold text-white disabled:opacity-70"
               style={{ background: "var(--color-navy-900)" }}
             >
-              {loading ? <Loader2 size={16} className="animate-spin" /> : <ChevronRight size={16} />}
               {loading ? "Signing in…" : `Sign in as ${ROLE_LABELS[role]}`}
+              {loading ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : <ChevronRight size={16} aria-hidden="true" />}
             </button>
           </form>
 
-          <p className="mt-5 text-center text-[11px]" style={{ color: "var(--color-text-tertiary)" }}>
+          <p className="mt-5 text-center text-xs" style={{ color: "var(--color-text-tertiary)" }}>
             This is a prototype — any details will sign you into the {ROLE_LABELS[role]} experience.
           </p>
         </div>
